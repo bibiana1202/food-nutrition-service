@@ -1,4 +1,3 @@
-require('dotenv').config();
 const path = require('node:path');
 const { connectDatabase, closeDatabase } = require('../config/database');
 const { migrateDatabase } = require('../config/migrator');

@@ -3,7 +3,7 @@ services:
     image: mariadb:11.4
     ports: ["127.0.0.1:${DATABASE_PORT:-3306}:3306"]
     env_file:
-      - path: ./backend/.env
+      - path: ./backend/.env.local
         required: true
     volumes:
       - mariadb-data:/var/lib/mysql
@@ -19,7 +19,7 @@ services:
     init: true
     ports: ["127.0.0.1:${API_PORT:-3000}:3000"]
     env_file:
-      - path: ./backend/.env
+      - path: ./backend/.env.local
         required: false
     environment: &app-environment
       DATABASE_HOST: db
@@ -33,7 +33,7 @@ services:
     build: ./backend
     profiles: [tools]
     env_file:
-      - path: ./backend/.env
+      - path: ./backend/.env.local
         required: false
     environment: *app-environment
     depends_on:
@@ -46,19 +46,6 @@ services:
     depends_on:
       api: { condition: service_healthy }
     restart: unless-stopped
-
-  db-test:
-    image: mariadb:11.4
-    profiles: [test]
-    ports: ["127.0.0.1:3307:3306"]
-    env_file:
-      - path: ./backend/.env.test
-        required: true
-    healthcheck:
-      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
-      interval: 5s
-      timeout: 5s
-      retries: 20
 
 volumes:
   mariadb-data:
