@@ -10,7 +10,7 @@
                        MariaDB / Docker volume
 ```
 
-과제 검증은 EC2의 Docker Compose에서 API와 MariaDB를 함께 실행할 수 있다. 실제 운영에서는 API와 Amazon RDS for MariaDB를 분리하면 백업, 장애 복구, 수평 확장이 수월하다.
+단일 EC2 구성에서는 Docker Compose로 API와 MariaDB를 함께 실행할 수 있다. 실제 운영에서는 API와 Amazon RDS for MariaDB를 분리하면 백업, 장애 복구, 수평 확장이 수월하다.
 
 ## 배포 순서
 
@@ -21,7 +21,7 @@
 5. 인스턴스의 HTTPS 프록시를 `127.0.0.1:3000`으로 연결하고 도메인 인증서를 설정한다. 외부에서는 HTTPS로만 관리자 키를 전달한다.
 6. [EC2 보안 그룹](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-security-groups.html)은 공개 HTTPS와 필요한 관리 접근만 허용하고, API 3000 포트를 직접 공개하지 않는다. 기본 Compose도 127.0.0.1에만 바인딩한다.
 7. DB 볼륨의 백업·복구와 로그 수집, 프록시의 실제 클라이언트 IP 전달 및 요청 제한 동작을 점검한다. 현재 앱은 전달된 IP 헤더를 자동으로 신뢰하지 않는다.
-8. 헬스 체크, API 검색, 관리자 변경 작업, 컨테이너 재시작 후 데이터 보존을 확인한 뒤 제출 README에 실제 URL을 추가한다.
+8. 헬스 체크, API 검색, 관리자 변경 작업, 컨테이너 재시작 후 데이터 보존을 확인한 뒤 운영 README에 실제 URL을 추가한다.
 
 컨테이너 이미지를 다른 머신에서 만들었다면 EC2의 CPU 아키텍처와 일치해야 한다. ECR 사용 시에는 빌드 이미지의 태그를 커밋 SHA로 관리하고 서버에서 해당 이미지를 내려받는 방식으로 확장할 수 있다.
 

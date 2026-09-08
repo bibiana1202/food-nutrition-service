@@ -30,7 +30,7 @@ const Food = sequelize.define(
       nutrientColumns.map((field) => [field, { type: DataTypes.DOUBLE, allowNull: true }]),
     ),
   },
-  { tableName: 'foods', timestamps: false, underscored: true },
+  { tableName: 'foods' },
 );
 
 module.exports = Food;

@@ -1,12 +1,19 @@
 const swaggerUi = require('swagger-ui-express');
 const { z } = require('zod');
-const { foodCreateSchema } = require('../utils/validator');
-const schema = (input) => {
-  const { $schema, ...output } = z.toJSONSchema(input, { io: 'input' });
-  return output;
-};
-const food = schema(foodCreateSchema.required().extend({ id: z.number().int().positive() }));
-const error = {
+const { foodCreateSchema, foodPatchSchema } = require('../utils/validator');
+
+const adminPaths = require('./swagger_admin');
+const foodPaths = require('./swagger_food');
+const healthPaths = require('./swagger_health');
+
+function toOpenApiSchema(input) {
+  const { $schema, ...schema } = z.toJSONSchema(input, { io: 'input' });
+  return schema;
+}
+
+const foodCreate = toOpenApiSchema(foodCreateSchema);
+const foodUpdate = toOpenApiSchema(foodPatchSchema);
+const errorSchema = {
   type: 'object',
   required: ['error', 'request_id'],
   properties: {
@@ -14,127 +21,144 @@ const error = {
       type: 'object',
       required: ['code', 'message', 'details'],
       properties: {
-        code: { type: 'string' },
-        message: { type: 'string' },
+        code: { type: 'string', example: 'VALIDATION_ERROR' },
+        message: { type: 'string', example: '입력값을 확인해주세요.' },
         details: { type: 'array', items: { type: 'object' } },
       },
     },
     request_id: { type: 'string', format: 'uuid' },
   },
 };
-const errors = {
-  400: {
-    description: '\uC798\uBABB\uB41C \uC694\uCCAD',
-    content: { 'application/json': { schema: error } },
+
+const errorResponse = (description) => ({
+  description,
+  content: {
+    'application/json': { schema: { $ref: '#/components/schemas/Error' } },
   },
-  404: {
-    description: '\uC874\uC7AC\uD558\uC9C0 \uC54A\uB294 \uC2DD\uD488',
-    content: { 'application/json': { schema: error } },
-  },
-};
-const id = { name: 'id', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } };
+});
+
+const environment = process.env.NODE_ENV || 'local';
+const serverUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+const serverDescription =
+  environment === 'production' ? '운영 서버' : environment === 'test' ? '테스트 서버' : '로컬 서버';
+
 const openApiDocument = {
   openapi: '3.1.0',
   info: {
-    title: '\uC2DD\uD488\uC601\uC591\uC131\uBD84 API',
+    title: '식품영양성분 API',
     version: '1.0.0',
-    description: 'Express + MariaDB \uC2DD\uD488 \uAC80\uC0C9 \uBC0F \uAD00\uB9AC API',
+    description: [
+      '식품 영양정보를 검색하고 관리하는 Express API입니다.',
+      '',
+      '## 관리자 인증',
+      '등록·수정·삭제 요청은 `Authorization: Bearer {ADMIN_API_KEY}` 헤더가 필요합니다.',
+      '',
+      '## 전역 Rate Limit',
+      'API 요청은 IP당 1분에 최대 180회로 제한됩니다.',
+      '한도를 초과하면 HTTP 429 응답을 반환합니다.',
+    ].join('\n'),
   },
+  servers: [{ url: serverUrl, description: serverDescription }],
+  tags: [
+    { name: 'Food', description: '식품 영양정보 조회 및 관리 API' },
+    { name: 'Admin', description: '관리자 인증 확인 API' },
+    { name: 'Health', description: '프로세스 및 데이터베이스 상태 확인 API' },
+  ],
   components: {
-    securitySchemes: { adminKey: { type: 'http', scheme: 'bearer' } },
-    schemas: { Food: food, Error: error },
-  },
-  paths: {
-    '/api/foods': {
-      get: {
-        summary: '\uC2DD\uD488 \uAC80\uC0C9 \uBC0F \uD398\uC774\uC9C0\uB124\uC774\uC158',
-        parameters: [
-          { name: 'food_name', in: 'query', schema: { type: 'string' } },
-          { name: 'research_year', in: 'query', schema: { type: 'integer' } },
-          { name: 'maker_name', in: 'query', schema: { type: 'string' } },
-          { name: 'food_code', in: 'query', schema: { type: 'string' } },
-          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+    securitySchemes: {
+      AdminKey: {
+        type: 'http',
+        scheme: 'bearer',
+        description: '관리자 API 키 인증 (Authorization: Bearer {ADMIN_API_KEY})',
+      },
+    },
+    schemas: {
+      FoodCreate: foodCreate,
+      FoodUpdate: foodUpdate,
+      Food: {
+        allOf: [
+          { $ref: '#/components/schemas/FoodCreate' },
           {
-            name: 'page_size',
-            in: 'query',
-            schema: { type: 'integer', default: 20, maximum: 100 },
+            type: 'object',
+            required: ['id', 'created_at', 'updated_at'],
+            properties: {
+              id: { type: 'integer', example: 1 },
+              created_at: {
+                type: 'string',
+                format: 'date-time',
+                example: '2026-09-08T07:00:00.000Z',
+              },
+              updated_at: {
+                type: 'string',
+                format: 'date-time',
+                example: '2026-09-08T07:00:00.000Z',
+              },
+            },
           },
         ],
-        responses: { 200: { description: '\uAC80\uC0C9 \uACB0\uACFC' }, ...errors },
       },
-      post: {
-        summary: '\uC2DD\uD488 \uB4F1\uB85D',
-        security: [{ adminKey: [] }],
-        requestBody: { required: true, content: { 'application/json': { schema: food } } },
-        responses: {
-          201: { description: '\uC0DD\uC131 \uC131\uACF5' },
-          409: { description: '\uC911\uBCF5 \uC2DD\uD488\uCF54\uB4DC' },
-          ...errors,
+      FoodList: {
+        type: 'object',
+        required: ['items', 'page', 'page_size', 'total', 'total_pages'],
+        properties: {
+          items: { type: 'array', items: { $ref: '#/components/schemas/Food' } },
+          page: { type: 'integer', example: 1 },
+          page_size: { type: 'integer', example: 20 },
+          total: { type: 'integer', example: 7683 },
+          total_pages: { type: 'integer', example: 385 },
         },
       },
+      AdminVerification: {
+        type: 'object',
+        required: ['authenticated'],
+        properties: { authenticated: { type: 'boolean', example: true } },
+      },
+      Liveness: {
+        type: 'object',
+        required: ['status'],
+        properties: { status: { type: 'string', example: 'ok' } },
+      },
+      Readiness: {
+        type: 'object',
+        required: ['status', 'database'],
+        properties: {
+          status: { type: 'string', example: 'ok' },
+          database: { type: 'string', example: 'ok' },
+        },
+      },
+      ReadinessFailure: {
+        type: 'object',
+        required: ['status', 'database'],
+        properties: {
+          status: { type: 'string', example: 'unavailable' },
+          database: { type: 'string', example: 'error' },
+        },
+      },
+      Error: errorSchema,
     },
-    '/api/foods/{id}': {
-      get: {
-        summary: '\uC2DD\uD488 \uC0C1\uC138 \uC870\uD68C',
-        parameters: [id],
-        responses: { 200: { description: '\uC2DD\uD488' }, ...errors },
-      },
-      patch: {
-        summary: '\uC2DD\uD488 \uBD80\uBD84 \uC218\uC815',
-        security: [{ adminKey: [] }],
-        parameters: [id],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': { schema: schema(foodCreateSchema.partial()) },
-          },
-        },
-        responses: {
-          200: { description: '\uC218\uC815 \uC131\uACF5' },
-          409: { description: '\uC911\uBCF5 \uC2DD\uD488\uCF54\uB4DC' },
-          ...errors,
-        },
-      },
-      delete: {
-        summary: '\uC2DD\uD488 \uC0AD\uC81C',
-        security: [{ adminKey: [] }],
-        parameters: [id],
-        responses: { 204: { description: '\uC0AD\uC81C \uC131\uACF5' }, ...errors },
-      },
-    },
-    '/api/admin/verify': {
-      post: {
-        summary: '\uAD00\uB9AC\uC790 \uD0A4 \uD655\uC778',
-        security: [{ adminKey: [] }],
-        responses: {
-          200: { description: '\uC778\uC99D \uC131\uACF5' },
-          401: { description: '\uC778\uC99D \uC2E4\uD328' },
-        },
-      },
-    },
-    '/health/live': {
-      get: {
-        summary: '\uD504\uB85C\uC138\uC2A4 \uC0C1\uD0DC',
-        responses: { 200: { description: '\uC815\uC0C1' } },
-      },
-    },
-    '/health/ready': {
-      get: {
-        summary: 'DB \uC900\uBE44 \uC0C1\uD0DC',
-        responses: {
-          200: { description: '\uC815\uC0C1' },
-          503: { description: 'DB \uC624\uB958' },
-        },
-      },
+    responses: {
+      BadRequest: errorResponse('잘못된 요청'),
+      Unauthorized: errorResponse('관리자 인증 실패'),
+      NotFound: errorResponse('리소스를 찾을 수 없음'),
+      Conflict: errorResponse('중복된 식품코드'),
+      TooManyRequests: errorResponse('요청 횟수 제한 초과'),
     },
   },
+  paths: {
+    ...foodPaths,
+    ...adminPaths,
+    ...healthPaths,
+  },
 };
+
 function setupSwagger(app) {
   app.get('/api/docs-json', (_req, res) => res.json(openApiDocument));
   app.use(
     '/api/docs',
     swaggerUi.serve,
-    swaggerUi.setup(openApiDocument, { swaggerOptions: { persistAuthorization: false } }),
+    swaggerUi.setup(openApiDocument, {
+      swaggerOptions: { persistAuthorization: false },
+    }),
   );
 }
 
