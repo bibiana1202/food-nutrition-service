@@ -48,6 +48,8 @@ test('CRUD와 nullable 필드 초기화', async () => {
   assert.equal(created.body.food_cd, 'D-TEST');
   assert.equal(created.body.food_name, '김치찌개');
   assert.equal(created.body.protein, null);
+  assert.ok(created.body.created_at);
+  assert.ok(created.body.updated_at);
   const url = `/api/foods/${created.body.id}`;
   assert.equal((await request(url)).body.calorie, 123.5);
   assert.equal((await request(url, 'PATCH', { calorie: 0 })).body.calorie, 0);
