@@ -1,0 +1,61 @@
+name: Food nutrition service CI
+
+on:
+  push:
+    paths:
+      - '02-food-nutrition-api/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - '02-food-nutrition-api/**'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: food_nutrition
+          MARIADB_USER: food_app
+          MARIADB_PASSWORD: local_food_password
+          MARIADB_ROOT_PASSWORD: local_root_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      MARIADB_DATABASE: food_nutrition
+      MARIADB_USER: food_app
+      MARIADB_PASSWORD: local_food_password
+    defaults:
+      run:
+        working-directory: 02-food-nutrition-api/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            02-food-nutrition-api/backend/package-lock.json
+            02-food-nutrition-api/frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run format:check
+      - run: npm ci
+        working-directory: 02-food-nutrition-api/frontend
+      - run: npm run build
+        working-directory: 02-food-nutrition-api/frontend
+      - run: npm run format:check
+        working-directory: 02-food-nutrition-api/frontend
+      - run: docker build -t food-nutrition-api-test ./backend
+        working-directory: 02-food-nutrition-api
+      - run: docker build -t food-nutrition-frontend-test ./frontend
+        working-directory: 02-food-nutrition-api

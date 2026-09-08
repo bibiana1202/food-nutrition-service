@@ -1,0 +1,32 @@
+{
+  "name": "food-nutrition-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express API for food nutrition data",
+  "engines": { "node": ">=20.19.0" },
+  "overrides": { "uuid": "^11.1.1" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --watch --env-file-if-exists=.env server.js",
+    "db:migrate": "node --env-file-if-exists=.env src/scripts/migrate.js",
+    "db:seed": "node --env-file-if-exists=.env src/scripts/seedFoods.js",
+    "db:verify": "node --env-file-if-exists=.env src/scripts/verifyData.js",
+    "test": "node --env-file-if-exists=.env.test --test --test-concurrency=1 tests/*.test.js",
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\""
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "mariadb": "^3.4.5",
+    "sequelize": "^6.37.7",
+    "swagger-ui-express": "^5.0.1",
+    "umzug": "^3.8.2",
+    "winston": "^3.17.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": { "prettier": "^3.9.6" }
+}

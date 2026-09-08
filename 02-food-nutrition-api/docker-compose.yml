@@ -1,0 +1,64 @@
+services:
+  db:
+    image: mariadb:11.4
+    ports: ["127.0.0.1:${DATABASE_PORT:-3306}:3306"]
+    env_file:
+      - path: ./backend/.env
+        required: true
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    init: true
+    ports: ["127.0.0.1:${API_PORT:-3000}:3000"]
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment: &app-environment
+      DATABASE_HOST: db
+      HOST: 0.0.0.0
+      PORT: 3000
+    depends_on:
+      db: { condition: service_healthy }
+    restart: unless-stopped
+
+  seed:
+    build: ./backend
+    profiles: [tools]
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment: *app-environment
+    depends_on:
+      db: { condition: service_healthy }
+    command: [npm, run, db:seed]
+
+  frontend:
+    build: ./frontend
+    ports: ["127.0.0.1:${FRONTEND_PORT:-8080}:80"]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+  db-test:
+    image: mariadb:11.4
+    profiles: [test]
+    ports: ["127.0.0.1:3307:3306"]
+    env_file:
+      - path: ./backend/.env.test
+        required: true
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mariadb-data:

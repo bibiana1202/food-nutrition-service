@@ -1,0 +1,25 @@
+{
+  "name": "food-nutrition-admin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "React administration console for the food nutrition API",
+  "engines": { "node": ">=20.19.0" },
+  "scripts": {
+    "dev": "vite --config vite.config.mjs",
+    "build": "vite build --config vite.config.mjs",
+    "preview": "vite preview --config vite.config.mjs",
+    "format": "prettier --write \"src/**/*.{js,jsx,css}\" \"*.mjs\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,css}\" \"*.mjs\""
+  },
+  "dependencies": {
+    "lucide-react": "^1.42.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "prettier": "^3.9.6",
+    "vite": "^6.4.3"
+  }
+}
