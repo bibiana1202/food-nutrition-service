@@ -21,7 +21,7 @@ jobs:
       mariadb:
         image: mariadb:11.4
         env:
-          MARIADB_DATABASE: food_nutrition
+          MARIADB_DATABASE: food_nutrition_test
           MARIADB_USER: food_app
           MARIADB_PASSWORD: local_food_password
           MARIADB_ROOT_PASSWORD: local_root_password
@@ -31,7 +31,10 @@ jobs:
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=5s --health-timeout=5s --health-retries=20
     env:
-      MARIADB_DATABASE: food_nutrition
+      NODE_ENV: test
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: 3306
+      MARIADB_DATABASE: food_nutrition_test
       MARIADB_USER: food_app
       MARIADB_PASSWORD: local_food_password
     defaults:

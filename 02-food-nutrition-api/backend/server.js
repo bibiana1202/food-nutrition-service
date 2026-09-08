@@ -1,4 +1,3 @@
-require('dotenv').config();
 const { createServer } = require('node:http');
 const createApplication = require('./src/app');
 const { connectDatabase, closeDatabase } = require('./src/config/database');
