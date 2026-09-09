@@ -73,14 +73,16 @@ API는 다음 검색 조건을 지원한다.
 curl -G --data-urlencode 'food_name=김치' http://localhost:3000/api/foods
 ```
 
-| 메서드 | 경로 | 기능 |
-| --- | --- | --- |
-| GET | `/api/foods` | 검색과 목록 |
-| GET | `/api/foods/:id` | 단건 조회 |
-| POST | `/api/foods` | 생성 |
-| PATCH | `/api/foods/:id` | 부분 수정 |
-| DELETE | `/api/foods/:id` | 삭제 |
-| POST | `/api/admin/verify` | 관리자 키 확인 |
+| 메서드 | 경로                | 기능           |
+| ------ | ------------------- | -------------- |
+| GET    | `/api/foods`        | 검색과 목록    |
+| GET    | `/api/foods/:id`    | 단건 조회      |
+| POST   | `/api/foods`        | 생성           |
+| PATCH  | `/api/foods/:id`    | 부분 수정      |
+| DELETE | `/api/foods/:id`    | 삭제           |
+| POST   | `/api/admin/verify` | 관리자 키 확인 |
+
+응답의 HTTP 상태와 세부 문자열 코드는 [Result Code 문서](backend/docs/result-codes.md)에서 확인할 수 있다.
 
 식품코드는 UNIQUE 인덱스, 연도와 ID는 복합 인덱스를 사용한다. Sequelize 모델과 Umzug 마이그레이션을 분리했으며 `sequelize.sync({ alter: true })`는 사용하지 않는다. 엑셀 적재는 InnoDB 트랜잭션에서 실행되며 오류가 발생하면 전체를 롤백한다. 재적재 시 기존 코드를 건너뛴다. 자세한 규칙은 [데이터 매핑](backend/docs/data-mapping.md)에 있다.
 

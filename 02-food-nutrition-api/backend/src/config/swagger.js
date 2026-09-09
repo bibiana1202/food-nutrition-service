@@ -1,5 +1,6 @@
 const swaggerUi = require('swagger-ui-express');
 const { z } = require('zod');
+const RESULT_CODES = require('../constants/resultCodes');
 const { foodCreateSchema, foodPatchSchema } = require('../utils/validator');
 
 const adminPaths = require('./swagger_admin');
@@ -15,23 +16,30 @@ const foodCreate = toOpenApiSchema(foodCreateSchema);
 const foodUpdate = toOpenApiSchema(foodPatchSchema);
 const errorSchema = {
   type: 'object',
-  required: ['error', 'request_id'],
+  required: ['success', 'code', 'message', 'details', 'request_id'],
   properties: {
-    error: {
-      type: 'object',
-      required: ['code', 'message', 'details'],
-      properties: {
-        code: { type: 'string', example: 'VALIDATION_ERROR' },
-        message: { type: 'string', example: '입력값을 확인해주세요.' },
-        details: { type: 'array', items: { type: 'object' } },
-      },
-    },
+    success: { type: 'boolean', const: false, example: false },
+    code: { type: 'string', example: RESULT_CODES.VALIDATION_ERROR.code },
+    message: { type: 'string', example: RESULT_CODES.VALIDATION_ERROR.message },
+    details: { type: 'array', items: { type: 'object' } },
     request_id: { type: 'string', format: 'uuid' },
   },
 };
 
-const errorResponse = (description) => ({
-  description,
+const successSchema = (data, result) => ({
+  type: 'object',
+  required: ['success', 'code', 'message', 'data', 'request_id'],
+  properties: {
+    success: { type: 'boolean', const: true, example: true },
+    code: { type: 'string', example: result.code },
+    message: { type: 'string', example: result.message },
+    data,
+    request_id: { type: 'string', format: 'uuid' },
+  },
+});
+
+const errorResponse = (result) => ({
+  description: result.message,
   content: {
     'application/json': { schema: { $ref: '#/components/schemas/Error' } },
   },
@@ -126,22 +134,42 @@ const openApiDocument = {
           database: { type: 'string', example: 'ok' },
         },
       },
-      ReadinessFailure: {
-        type: 'object',
-        required: ['status', 'database'],
-        properties: {
-          status: { type: 'string', example: 'unavailable' },
-          database: { type: 'string', example: 'error' },
-        },
-      },
+      FoodResponse: successSchema(
+        { $ref: '#/components/schemas/Food' },
+        RESULT_CODES.FOOD_GET_SUCCESS,
+      ),
+      FoodListResponse: successSchema(
+        { $ref: '#/components/schemas/FoodList' },
+        RESULT_CODES.FOOD_LIST_SUCCESS,
+      ),
+      FoodCreatedResponse: successSchema(
+        { $ref: '#/components/schemas/Food' },
+        RESULT_CODES.FOOD_CREATED,
+      ),
+      FoodUpdatedResponse: successSchema(
+        { $ref: '#/components/schemas/Food' },
+        RESULT_CODES.FOOD_UPDATED,
+      ),
+      AdminVerificationResponse: successSchema(
+        { $ref: '#/components/schemas/AdminVerification' },
+        RESULT_CODES.ADMIN_VERIFIED,
+      ),
+      LivenessResponse: successSchema(
+        { $ref: '#/components/schemas/Liveness' },
+        RESULT_CODES.HEALTH_LIVE,
+      ),
+      ReadinessResponse: successSchema(
+        { $ref: '#/components/schemas/Readiness' },
+        RESULT_CODES.HEALTH_READY,
+      ),
       Error: errorSchema,
     },
     responses: {
-      BadRequest: errorResponse('잘못된 요청'),
-      Unauthorized: errorResponse('관리자 인증 실패'),
-      NotFound: errorResponse('리소스를 찾을 수 없음'),
-      Conflict: errorResponse('중복된 식품코드'),
-      TooManyRequests: errorResponse('요청 횟수 제한 초과'),
+      BadRequest: errorResponse(RESULT_CODES.VALIDATION_ERROR),
+      Unauthorized: errorResponse(RESULT_CODES.ADMIN_AUTH_REQUIRED),
+      NotFound: errorResponse(RESULT_CODES.FOOD_NOT_FOUND),
+      Conflict: errorResponse(RESULT_CODES.DUPLICATE_FOOD_CODE),
+      TooManyRequests: errorResponse(RESULT_CODES.RATE_LIMIT_EXCEEDED),
     },
   },
   paths: {

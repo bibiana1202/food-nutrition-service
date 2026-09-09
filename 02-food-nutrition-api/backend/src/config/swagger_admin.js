@@ -10,7 +10,7 @@ module.exports = {
           description: '인증 성공',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/AdminVerification' },
+              schema: { $ref: '#/components/schemas/AdminVerificationResponse' },
             },
           },
         },

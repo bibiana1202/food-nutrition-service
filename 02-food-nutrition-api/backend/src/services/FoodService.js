@@ -1,4 +1,5 @@
 const { Op, fn, col, where: sqlWhere } = require('sequelize');
+const RESULT_CODES = require('../constants/resultCodes');
 const { Food } = require('../models');
 const { ApiError } = require('../middlewares/errorHandler');
 
@@ -32,7 +33,7 @@ class FoodService {
 
   async get(id) {
     const food = await Food.findByPk(id);
-    if (!food) throw new ApiError(404, 'NOT_FOUND', '식품 정보를 찾을 수 없습니다.');
+    if (!food) throw new ApiError(RESULT_CODES.FOOD_NOT_FOUND);
     return food;
   }
 
@@ -43,13 +44,13 @@ class FoodService {
 
   async update(id, input) {
     const [affected] = await Food.update(input, { where: { id } });
-    if (!affected) throw new ApiError(404, 'NOT_FOUND', '수정할 식품 정보를 찾을 수 없습니다.');
+    if (!affected) throw new ApiError(RESULT_CODES.FOOD_NOT_FOUND);
     return this.get(id);
   }
 
   async remove(id) {
     const affected = await Food.destroy({ where: { id } });
-    if (!affected) throw new ApiError(404, 'NOT_FOUND', '삭제할 식품 정보를 찾을 수 없습니다.');
+    if (!affected) throw new ApiError(RESULT_CODES.FOOD_NOT_FOUND);
   }
 }
 

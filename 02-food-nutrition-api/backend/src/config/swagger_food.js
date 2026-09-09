@@ -55,7 +55,10 @@ module.exports = {
         },
       ],
       responses: {
-        200: { description: '조회 성공', content: json({ $ref: '#/components/schemas/FoodList' }) },
+        200: {
+          description: '조회 성공',
+          content: json({ $ref: '#/components/schemas/FoodListResponse' }),
+        },
         400: { $ref: '#/components/responses/BadRequest' },
         429: { $ref: '#/components/responses/TooManyRequests' },
       },
@@ -69,7 +72,10 @@ module.exports = {
         content: json({ $ref: '#/components/schemas/FoodCreate' }),
       },
       responses: {
-        201: { description: '등록 성공', content: json({ $ref: '#/components/schemas/Food' }) },
+        201: {
+          description: '등록 성공',
+          content: json({ $ref: '#/components/schemas/FoodCreatedResponse' }),
+        },
         400: { $ref: '#/components/responses/BadRequest' },
         401: { $ref: '#/components/responses/Unauthorized' },
         409: { $ref: '#/components/responses/Conflict' },
@@ -83,7 +89,10 @@ module.exports = {
       summary: '식품 상세 조회',
       parameters: [idParameter],
       responses: {
-        200: { description: '조회 성공', content: json({ $ref: '#/components/schemas/Food' }) },
+        200: {
+          description: '조회 성공',
+          content: json({ $ref: '#/components/schemas/FoodResponse' }),
+        },
         400: { $ref: '#/components/responses/BadRequest' },
         404: { $ref: '#/components/responses/NotFound' },
         429: { $ref: '#/components/responses/TooManyRequests' },
@@ -99,7 +108,10 @@ module.exports = {
         content: json({ $ref: '#/components/schemas/FoodUpdate' }),
       },
       responses: {
-        200: { description: '수정 성공', content: json({ $ref: '#/components/schemas/Food' }) },
+        200: {
+          description: '수정 성공',
+          content: json({ $ref: '#/components/schemas/FoodUpdatedResponse' }),
+        },
         400: { $ref: '#/components/responses/BadRequest' },
         401: { $ref: '#/components/responses/Unauthorized' },
         404: { $ref: '#/components/responses/NotFound' },

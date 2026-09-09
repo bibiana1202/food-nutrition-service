@@ -45,15 +45,17 @@ test('CRUD와 nullable 필드 초기화', async () => {
     calorie: 123.5,
   });
   assert.equal(created.response.status, 201);
-  assert.equal(created.body.food_cd, 'D-TEST');
-  assert.equal(created.body.food_name, '김치찌개');
-  assert.equal(created.body.protein, null);
-  assert.ok(created.body.created_at);
-  assert.ok(created.body.updated_at);
-  const url = `/api/foods/${created.body.id}`;
-  assert.equal((await request(url)).body.calorie, 123.5);
-  assert.equal((await request(url, 'PATCH', { calorie: 0 })).body.calorie, 0);
-  assert.equal((await request(url, 'PATCH', { calorie: null })).body.calorie, null);
+  assert.equal(created.body.success, true);
+  assert.equal(created.body.code, 'FOOD_CREATED');
+  assert.equal(created.body.data.food_cd, 'D-TEST');
+  assert.equal(created.body.data.food_name, '김치찌개');
+  assert.equal(created.body.data.protein, null);
+  assert.ok(created.body.data.created_at);
+  assert.ok(created.body.data.updated_at);
+  const url = `/api/foods/${created.body.data.id}`;
+  assert.equal((await request(url)).body.data.calorie, 123.5);
+  assert.equal((await request(url, 'PATCH', { calorie: 0 })).body.data.calorie, 0);
+  assert.equal((await request(url, 'PATCH', { calorie: null })).body.data.calorie, null);
   assert.equal((await request(url, 'DELETE')).response.status, 204);
   assert.equal((await request(url)).response.status, 404);
 });
@@ -69,11 +71,11 @@ test('검색 조건 조합과 페이지네이션', async () => {
   const first = await request(
     '/api/foods?food_name=김치&research_year=2020&maker_name=서울&page_size=1',
   );
-  assert.equal(first.body.total, 2);
-  assert.equal(first.body.items[0].food_cd, 'SEARCH-1');
-  assert.equal((await request('/api/foods?food_name=%25_')).body.total, 1);
+  assert.equal(first.body.data.total, 2);
+  assert.equal(first.body.data.items[0].food_cd, 'SEARCH-1');
+  assert.equal((await request('/api/foods?food_name=%25_')).body.data.total, 1);
   assert.equal(
-    (await request('/api/foods?food_code=%20search-3%20')).body.items[0].food_cd,
+    (await request('/api/foods?food_code=%20search-3%20')).body.data.items[0].food_cd,
     'SEARCH-3',
   );
 });
@@ -89,7 +91,8 @@ test('중복 식품코드는 409', async () => {
 test('없는 리소스는 일관된 404 응답', async () => {
   const { response, body } = await request('/api/foods/999999');
   assert.equal(response.status, 404);
-  assert.equal(body.error.code, 'NOT_FOUND');
+  assert.equal(body.success, false);
+  assert.equal(body.code, 'FOOD_NOT_FOUND');
   assert.equal(body.request_id, response.headers.get('x-request-id'));
 });
 
@@ -138,7 +141,7 @@ test('잘못된 JSON과 큰 본문도 공통 오류 형식', async () => {
       body,
     });
     assert.equal(response.status, status);
-    assert.ok((await response.json()).error.code);
+    assert.ok((await response.json()).code);
   }
 });
 

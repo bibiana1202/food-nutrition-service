@@ -79,9 +79,9 @@ function ErrorMessage({ error }) {
       {error instanceof Error
         ? error.message
         : '\uC694\uCCAD\uC744 \uC644\uB8CC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.'}
-      {error instanceof RequestError && error.payload.error.details.length > 0 && (
+      {error instanceof RequestError && error.payload.details.length > 0 && (
         <ul>
-          {error.payload.error.details.map((detail, i) => (
+          {error.payload.details.map((detail, i) => (
             <li key={i}>
               {detail.field}: {detail.message}
             </li>
