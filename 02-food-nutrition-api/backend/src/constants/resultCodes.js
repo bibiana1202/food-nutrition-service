@@ -17,9 +17,17 @@ const RESULT_CODES = Object.freeze({
   ROUTE_NOT_FOUND: defineResult('ROUTE_NOT_FOUND', 404, '요청한 경로를 찾을 수 없습니다.'),
   DUPLICATE_FOOD_CODE: defineResult('DUPLICATE_FOOD_CODE', 409, '이미 등록된 식품코드입니다.'),
   PAYLOAD_TOO_LARGE: defineResult('PAYLOAD_TOO_LARGE', 413, '요청 본문 크기를 초과했습니다.'),
-  RATE_LIMIT_EXCEEDED: defineResult('RATE_LIMIT_EXCEEDED',429,'요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.',),
+  RATE_LIMIT_EXCEEDED: defineResult(
+    'RATE_LIMIT_EXCEEDED',
+    429,
+    '요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.',
+  ),
   INTERNAL_ERROR: defineResult('INTERNAL_ERROR', 500, '서버 오류가 발생했습니다.'),
-  ADMIN_KEY_NOT_CONFIGURED: defineResult('ADMIN_KEY_NOT_CONFIGURED',503,'관리자 키가 설정되지 않아 읽기 전용으로 운영 중입니다.',),
+  ADMIN_KEY_NOT_CONFIGURED: defineResult(
+    'ADMIN_KEY_NOT_CONFIGURED',
+    503,
+    '관리자 키가 설정되지 않아 읽기 전용으로 운영 중입니다.',
+  ),
   DATABASE_BUSY: defineResult('DATABASE_BUSY', 503, '잠시 후 다시 시도해주세요.'),
   DATABASE_UNAVAILABLE: defineResult('DATABASE_UNAVAILABLE', 503, '데이터베이스 연결 오류'),
 });
