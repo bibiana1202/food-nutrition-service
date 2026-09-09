@@ -60,7 +60,7 @@ test('CRUD와 nullable 필드 초기화', async () => {
   assert.equal((await request(url)).response.status, 404);
 });
 
-test('검색 조건 조합과 페이지네이션', async () => {
+test('검색 조건 조합과 커서 페이지네이션', async () => {
   for (const [food_cd, food_name, research_year, maker_name] of [
     ['SEARCH-1', '김치찌개', 2020, '서울'],
     ['SEARCH-2', '김치볶음', 2020, '서울'],
@@ -71,9 +71,15 @@ test('검색 조건 조합과 페이지네이션', async () => {
   const first = await request(
     '/api/foods?food_name=김치&research_year=2020&maker_name=서울&page_size=1',
   );
-  assert.equal(first.body.data.total, 2);
+  assert.equal(first.body.data.items.length, 1);
   assert.equal(first.body.data.items[0].food_cd, 'SEARCH-1');
-  assert.equal((await request('/api/foods?food_name=%25_')).body.data.total, 1);
+  assert.equal(first.body.data.has_next, true);
+  const second = await request(
+    `/api/foods?food_name=김치&research_year=2020&maker_name=서울&page_size=1&cursor=${first.body.data.next_cursor}`,
+  );
+  assert.equal(second.body.data.items[0].food_cd, 'SEARCH-2');
+  assert.equal(second.body.data.has_next, false);
+  assert.equal((await request('/api/foods?food_name=%25_')).body.data.items.length, 1);
   assert.equal(
     (await request('/api/foods?food_code=%20search-3%20')).body.data.items[0].food_cd,
     'SEARCH-3',
@@ -105,7 +111,13 @@ test('잘못된 입력과 쿼리를 거부', async () => {
   ]) {
     assert.equal((await request('/api/foods', 'POST', body)).response.status, 400);
   }
-  for (const query of ['page=0', 'page_size=101', 'unknown=x', 'page=1&page=2']) {
+  for (const query of [
+    'cursor=0',
+    'cursor=abc',
+    'page_size=101',
+    'unknown=x',
+    'cursor=1&cursor=2',
+  ]) {
     assert.equal((await request(`/api/foods?${query}`)).response.status, 400);
   }
 });

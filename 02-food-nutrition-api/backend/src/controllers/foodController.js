@@ -8,7 +8,7 @@ class FoodController {
    * 식품 목록 조회 및 검색
    * GET /api/foods
    *
-   * 쿼리 문자열을 검증한 뒤 검색 조건과 페이지 정보를 서비스 계층에 전달한다.
+   * 쿼리 문자열을 검증한 뒤 검색 조건과 커서 정보를 서비스 계층에 전달한다.
    */
   static async listFoods(req, res) {
     const search = searchSchema.parse(req.query);

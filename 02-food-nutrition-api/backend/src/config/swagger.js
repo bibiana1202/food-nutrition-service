@@ -107,13 +107,16 @@ const openApiDocument = {
       },
       FoodList: {
         type: 'object',
-        required: ['items', 'page', 'page_size', 'total', 'total_pages'],
+        required: ['items', 'page_size', 'next_cursor', 'has_next'],
         properties: {
           items: { type: 'array', items: { $ref: '#/components/schemas/Food' } },
-          page: { type: 'integer', example: 1 },
           page_size: { type: 'integer', example: 20 },
-          total: { type: 'integer', example: 7683 },
-          total_pages: { type: 'integer', example: 385 },
+          next_cursor: {
+            type: ['string', 'null'],
+            description: '다음 조회에 전달할 cursor. 다음 데이터가 없으면 null',
+            example: '20',
+          },
+          has_next: { type: 'boolean', example: true },
         },
       },
       AdminVerification: {

@@ -73,6 +73,12 @@ API는 다음 검색 조건을 지원한다.
 curl -G --data-urlencode 'food_name=김치' http://localhost:3000/api/foods
 ```
 
+목록은 ID 기반 커서 페이지네이션을 사용한다. 첫 요청에서는 `cursor`를 생략하고, 다음 요청에는 이전 응답의 `next_cursor`를 전달한다. `has_next`가 `false`이면 마지막 목록이다.
+
+```bash
+curl 'http://localhost:3000/api/foods?page_size=20&cursor=20'
+```
+
 | 메서드 | 경로                | 기능           |
 | ------ | ------------------- | -------------- |
 | GET    | `/api/foods`        | 검색과 목록    |

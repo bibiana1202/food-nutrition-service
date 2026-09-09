@@ -5,29 +5,34 @@ const { ApiError } = require('../middlewares/errorHandler');
 
 class FoodService {
   async list(search) {
-    const where = { [Op.and]: [] };
+    const conditions = [];
+
     if (search.food_name)
-      where[Op.and].push(
-        sqlWhere(fn('LOCATE', search.food_name, col('food_name')), { [Op.gt]: 0 }),
-      );
+      conditions.push(sqlWhere(fn('LOCATE', search.food_name, col('food_name')), { [Op.gt]: 0 }));
     if (search.maker_name)
-      where[Op.and].push(
-        sqlWhere(fn('LOCATE', search.maker_name, col('maker_name')), { [Op.gt]: 0 }),
-      );
-    if (search.research_year !== undefined) where.research_year = search.research_year;
-    if (search.food_code) where.food_cd = search.food_code;
-    const { rows, count } = await Food.findAndCountAll({
-      where,
+      conditions.push(sqlWhere(fn('LOCATE', search.maker_name, col('maker_name')), { [Op.gt]: 0 }));
+    if (search.research_year !== undefined)
+      conditions.push({ research_year: search.research_year });
+    if (search.food_code) conditions.push({ food_cd: search.food_code });
+
+    // 마지막으로 조회한 ID보다 큰 행부터 가져와 큰 OFFSET에서 발생하는 스캔 비용을 피한다.
+    if (search.cursor !== undefined) conditions.push({ id: { [Op.gt]: search.cursor } });
+
+    // 한 건을 더 조회해 별도의 COUNT 쿼리 없이 다음 페이지 존재 여부를 판단한다.
+    const rows = await Food.findAll({
+      where: conditions.length ? { [Op.and]: conditions } : undefined,
       order: [['id', 'ASC']],
-      offset: (search.page - 1) * search.page_size,
-      limit: search.page_size,
+      limit: search.page_size + 1,
     });
+
+    const hasNext = rows.length > search.page_size;
+    const items = hasNext ? rows.slice(0, search.page_size) : rows;
+
     return {
-      items: rows,
-      page: search.page,
+      items,
       page_size: search.page_size,
-      total: count,
-      total_pages: Math.ceil(count / search.page_size),
+      next_cursor: hasNext ? String(items.at(-1).id) : null,
+      has_next: hasNext,
     };
   }
 
