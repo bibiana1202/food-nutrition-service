@@ -1,4 +1,5 @@
 const express = require('express');
+const RESULT_CODES = require('./constants/resultCodes');
 const helmet = require('helmet');
 const { setupSwagger } = require('./config/swagger');
 const createApiRoutes = require('./routes/api');
@@ -17,9 +18,7 @@ function createApplication(adminKey = '', logging = true) {
   app.use('/health', healthRoutes);
   app.use('/api', createApiRoutes(adminKey));
   setupSwagger(app);
-  app.use((_req, _res, next) =>
-    next(new ApiError(404, 'NOT_FOUND', '요청한 경로를 찾을 수 없습니다.')),
-  );
+  app.use((_req, _res, next) => next(new ApiError(RESULT_CODES.ROUTE_NOT_FOUND)));
   app.use(errorHandler);
   return app;
 }

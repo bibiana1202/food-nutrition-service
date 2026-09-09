@@ -7,7 +7,7 @@ module.exports = {
         200: {
           description: '프로세스 정상',
           content: {
-            'application/json': { schema: { $ref: '#/components/schemas/Liveness' } },
+            'application/json': { schema: { $ref: '#/components/schemas/LivenessResponse' } },
           },
         },
       },
@@ -22,13 +22,15 @@ module.exports = {
         200: {
           description: '서비스 준비 완료',
           content: {
-            'application/json': { schema: { $ref: '#/components/schemas/Readiness' } },
+            'application/json': { schema: { $ref: '#/components/schemas/ReadinessResponse' } },
           },
         },
         503: {
           description: '데이터베이스 연결 오류',
           content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ReadinessFailure' } },
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+            },
           },
         },
       },
