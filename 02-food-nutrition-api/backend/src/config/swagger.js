@@ -47,7 +47,8 @@ const errorResponse = (result) => ({
 });
 
 const environment = process.env.NODE_ENV || 'local';
-const serverUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+// 기본값은 현재 Swagger 화면과 같은 origin을 사용해 Docker/Nginx 환경에서도 CORS 없이 호출한다.
+const serverUrl = process.env.API_BASE_URL || '/';
 const serverDescription =
   environment === 'production' ? '운영 서버' : environment === 'test' ? '테스트 서버' : '로컬 서버';
 
