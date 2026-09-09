@@ -3,10 +3,21 @@ const RESULT_CODES = require('../constants/resultCodes');
 const { Food } = require('../models');
 const { ApiError } = require('../middlewares/errorHandler');
 
+/**
+ * 식품 조회와 변경에 필요한 업무 로직을 담당한다.
+ * Controller에서 검증된 값만 전달받고, DB 결과 또는 업무 오류를 반환한다.
+ */
 class FoodService {
+  /**
+   * 검색 조건과 ID 커서를 이용해 식품 목록을 조회한다.
+   *
+   * @param {object} search 검증이 끝난 검색 조건과 페이지 크기
+   * @returns {Promise<object>} 식품 목록과 다음 커서 정보
+   */
   async list(search) {
     const conditions = [];
 
+    // LOCATE를 사용해 %, _ 같은 문자를 와일드카드가 아닌 일반 검색어로 처리한다.
     if (search.food_name)
       conditions.push(sqlWhere(fn('LOCATE', search.food_name, col('food_name')), { [Op.gt]: 0 }));
     if (search.maker_name)
@@ -36,27 +47,46 @@ class FoodService {
     };
   }
 
+  /**
+   * ID에 해당하는 식품을 조회한다.
+   *
+   * @throws {ApiError} 식품이 존재하지 않으면 FOOD_NOT_FOUND
+   */
   async get(id) {
     const food = await Food.findByPk(id);
     if (!food) throw new ApiError(RESULT_CODES.FOOD_NOT_FOUND);
     return food;
   }
 
+  /**
+   * 식품을 등록하고 DB에 저장된 최종 데이터를 반환한다.
+   */
   async create(input) {
     const food = await Food.create(input);
     return this.get(food.id);
   }
 
+  /**
+   * 전달된 필드만 수정하고 변경된 식품 정보를 다시 조회한다.
+   *
+   * @throws {ApiError} 수정할 식품이 존재하지 않으면 FOOD_NOT_FOUND
+   */
   async update(id, input) {
     const [affected] = await Food.update(input, { where: { id } });
     if (!affected) throw new ApiError(RESULT_CODES.FOOD_NOT_FOUND);
     return this.get(id);
   }
 
+  /**
+   * ID에 해당하는 식품을 삭제한다.
+   *
+   * @throws {ApiError} 삭제할 식품이 존재하지 않으면 FOOD_NOT_FOUND
+   */
   async remove(id) {
     const affected = await Food.destroy({ where: { id } });
     if (!affected) throw new ApiError(RESULT_CODES.FOOD_NOT_FOUND);
   }
 }
 
+// 상태를 보관하지 않는 서비스이므로 하나의 인스턴스를 애플리케이션 전체에서 공유한다.
 module.exports = new FoodService();

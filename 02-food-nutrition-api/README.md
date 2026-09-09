@@ -63,6 +63,8 @@ npm run dev
 
 Docker Compose도 로컬 개발 설정인 `backend/.env.local`을 읽는다. `DATABASE_HOST`와 `DATABASE_PORT`는 Express 연결 위치이고 `MARIADB_*`는 Express와 MariaDB 컨테이너가 함께 사용하는 DB 설정이다. 실제 환경 파일은 Git에 포함하지 않고 `.env.local.example`만 공유한다.
 
+`LOG_LEVEL`은 로컬에서 기본 `debug`, 운영에서 기본 `info`를 사용한다. 로컬 로그는 읽기 쉬운 한 줄 형식이며 운영 로그는 JSON으로 표준 출력에 기록된다. Docker에서는 `docker compose logs -f api`로 확인하고, 배포 환경에서는 CloudWatch 같은 로그 수집 도구가 표준 출력을 보관한다.
+
 ```http
 Authorization: Bearer <ADMIN_API_KEY>
 ```
