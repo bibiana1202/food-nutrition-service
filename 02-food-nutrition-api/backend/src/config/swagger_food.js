@@ -15,7 +15,7 @@ module.exports = {
     get: {
       tags: ['Food'],
       summary: '식품 목록 조회 및 검색',
-      description: '식품명, 조사연도, 제조사명, 식품코드로 검색하고 페이지 단위로 조회합니다.',
+      description: '식품명, 조사연도, 제조사명, 식품코드로 검색하고 커서 단위로 조회합니다.',
       parameters: [
         {
           name: 'food_name',
@@ -42,10 +42,10 @@ module.exports = {
           schema: { type: 'string', example: 'D000006' },
         },
         {
-          name: 'page',
+          name: 'cursor',
           in: 'query',
-          description: '페이지 번호',
-          schema: { type: 'integer', minimum: 1, maximum: 10000, default: 1 },
+          description: '이전 응답의 next_cursor. 첫 조회에서는 생략합니다.',
+          schema: { type: 'string', pattern: '^[1-9]\\d*$', example: '20' },
         },
         {
           name: 'page_size',

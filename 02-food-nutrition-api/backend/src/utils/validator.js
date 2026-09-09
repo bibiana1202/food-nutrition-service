@@ -51,7 +51,7 @@ const searchSchema = z
     research_year: positiveIntegerString(2100).pipe(z.number().min(1900)).optional(),
     maker_name: z.string().trim().min(1).max(300).optional(),
     food_code: z.string().trim().toUpperCase().min(1).max(64).optional(),
-    page: positiveIntegerString(10000).default(1),
+    cursor: positiveIntegerString(Number.MAX_SAFE_INTEGER).optional(),
     page_size: positiveIntegerString(100).default(20),
   })
   .strict();

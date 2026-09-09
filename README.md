@@ -4,18 +4,19 @@
 
 | 구성 요소 | 구현 | 문서 |
 | --- | --- | --- |
-| 개미수열 가운데 두 자리 | Python, 문자열 DAG, 테스트 우선 작성 | [01-look-and-say](01-look-and-say/README.md) |
+| 개미수열 가운데 두 자리 | Node.js, 문자열 DAG, 테스트 우선 작성 | [01-look-and-say](01-look-and-say/README.md) |
 | 식품영양성분 API | Node.js·JavaScript·Express·MariaDB, React 관리자 화면 | [02-food-nutrition-api](02-food-nutrition-api/README.md) |
 
 ## 알고리즘 실행
 
 ```bash
 cd 01-look-and-say
-python3 -m look_and_say 99 --length
-python3 -m unittest discover -s tests -v
+npm ci
+node solution.js 99
+npm test
 ```
 
-Python 3.12 이상이며 실행에 외부 의존성이 없다. n=99에서도 전체 문자열을 만들지 않고 가운데 두 자리를 계산한다.
+Node.js 18 이상이며 실행에 외부 의존성이 없다. n=99에서도 전체 문자열을 만들지 않고 가운데 두 자리를 계산한다.
 
 ## 서비스 실행
 

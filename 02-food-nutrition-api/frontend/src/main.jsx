@@ -225,8 +225,10 @@ function FoodForm({ food, adminKey, onClose, onSaved }) {
 function App() {
   const [filters, setFilters] = useState(emptyFilters);
   const [applied, setApplied] = useState(emptyFilters);
-  const [page, setPage] = useState(1);
+  const [cursor, setCursor] = useState(null);
+  const [cursorHistory, setCursorHistory] = useState([]);
   const [pageSize, setPageSize] = useState(20);
+  const page = cursorHistory.length + 1;
   const [data, setData] = useState();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState();
@@ -255,7 +257,8 @@ function App() {
   );
   useEffect(() => {
     const abort = new AbortController();
-    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    const params = new URLSearchParams({ page_size: String(pageSize) });
+    if (cursor) params.set('cursor', cursor);
     Object.entries(applied).forEach(([key, value]) => {
       if (value.trim()) params.set(key, value.trim());
     });
@@ -273,7 +276,7 @@ function App() {
         }
       });
     return () => abort.abort();
-  }, [applied, page, pageSize, refresh]);
+  }, [applied, cursor, pageSize, refresh]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(''), 5e3);
@@ -291,7 +294,8 @@ function App() {
   const reset = () => {
     setFilters(emptyFilters);
     setApplied(emptyFilters);
-    setPage(1);
+    setCursor(null);
+    setCursorHistory([]);
   };
   const saved = () => {
     setEditor(void 0);
@@ -323,8 +327,12 @@ function App() {
       await api(`/api/foods/${deleting.id}`, { method: 'DELETE', key: adminKey });
       setDeleting(void 0);
       setSelected(void 0);
-      if (data?.items.length === 1 && page > 1) setPage(page - 1);
-      else setRefresh((value) => value + 1);
+      if (data?.items.length === 1 && cursorHistory.length) {
+        setCursor(cursorHistory.at(-1) ?? null);
+        setCursorHistory((history) => history.slice(0, -1));
+      } else {
+        setRefresh((value) => value + 1);
+      }
       setNotice('\uC2DD\uD488 \uC815\uBCF4\uB97C \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4.');
     } catch (error2) {
       setDeleteError(error2);
@@ -423,7 +431,8 @@ function App() {
               onSubmit={(event) => {
                 event.preventDefault();
                 setApplied({ ...filters });
-                setPage(1);
+                setCursor(null);
+                setCursorHistory([]);
               }}
             >
               <label className="name-filter">
@@ -477,7 +486,9 @@ function App() {
             <div className="results-toolbar">
               <div className="result-title">
                 <h2 id="results-heading">식품 목록</h2>
-                <span className="count">{data ? number.format(data.total) : '\u2014'}</span>
+                <span className="count">
+                  {data ? `${number.format(data.items.length)}개 표시` : '\u2014'}
+                </span>
                 {Object.values(applied).some(Boolean) && (
                   <span className="filter-badge">
                     <Filter size={12} />
@@ -491,7 +502,8 @@ function App() {
                   value={pageSize}
                   onChange={(e) => {
                     setPageSize(Number(e.target.value));
-                    setPage(1);
+                    setCursor(null);
+                    setCursorHistory([]);
                   }}
                 >
                   <option value="20">20개</option>
@@ -572,26 +584,29 @@ function App() {
             )}
             <div className="pagination">
               <span>
-                {data?.total
-                  ? `${number.format((page - 1) * pageSize + 1)}\u2013${number.format(Math.min(page * pageSize, data.total))} / ${number.format(data.total)}\uAC1C`
-                  : '0\uAC1C'}
+                {data?.items.length ? `${number.format(data.items.length)}개 조회됨` : '0개'}
               </span>
               <div>
                 <button
                   className="page-arrow"
                   aria-label="이전 페이지"
-                  disabled={page <= 1 || loading}
-                  onClick={() => setPage(page - 1)}
+                  disabled={!cursorHistory.length || loading}
+                  onClick={() => {
+                    setCursor(cursorHistory.at(-1) ?? null);
+                    setCursorHistory((history) => history.slice(0, -1));
+                  }}
                 >
                   <ChevronLeft size={18} />
                 </button>
                 <span className="current-page">{page}</span>
-                <span className="total-pages">/ {Math.max(1, data?.total_pages ?? 1)}</span>
                 <button
                   className="page-arrow"
                   aria-label="다음 페이지"
-                  disabled={!data || page >= data.total_pages || loading}
-                  onClick={() => setPage(page + 1)}
+                  disabled={!data?.has_next || loading}
+                  onClick={() => {
+                    setCursorHistory((history) => [...history, cursor]);
+                    setCursor(data.next_cursor);
+                  }}
                 >
                   <ChevronRight size={18} />
                 </button>
