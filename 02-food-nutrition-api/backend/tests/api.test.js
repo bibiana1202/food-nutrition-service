@@ -1,6 +1,6 @@
 const { before, after, test } = require('node:test');
 const assert = require('node:assert/strict');
-const createApplication = require('../src/app');
+const { createApplication } = require('../server');
 const { connectDatabase, closeDatabase } = require('../src/config/database');
 const { migrateDatabase } = require('../src/config/migrator');
 const { Food } = require('../src/models');
@@ -127,6 +127,9 @@ test('쓰기 인증과 공개 조회 및 헬스 체크', async () => {
   assert.equal((await request('/api/foods', 'POST', payload, null)).response.status, 401);
   assert.equal((await request('/api/foods', 'POST', payload, 'wrong')).response.status, 401);
   assert.equal((await request('/api/foods', 'GET', undefined, null)).response.status, 200);
+  const apiInfo = await request('/api', 'GET', undefined, null);
+  assert.equal(apiInfo.body.code, 'API_INFO_SUCCESS');
+  assert.equal(apiInfo.body.data.endpoints.foods, '/api/foods');
   assert.equal((await request('/api/admin/verify', 'POST')).response.status, 200);
   assert.equal((await request('/health/ready')).response.status, 200);
   assert.ok((await request('/api/docs-json')).body.paths['/api/foods']);

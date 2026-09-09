@@ -4,6 +4,7 @@ const RESULT_CODES = require('../constants/resultCodes');
 const { foodCreateSchema, foodPatchSchema } = require('../utils/validator');
 
 const adminPaths = require('./swagger_admin');
+const apiPaths = require('./swagger_api');
 const foodPaths = require('./swagger_food');
 const healthPaths = require('./swagger_health');
 
@@ -68,6 +69,7 @@ const openApiDocument = {
   },
   servers: [{ url: serverUrl, description: serverDescription }],
   tags: [
+    { name: 'System', description: 'API 기본 정보' },
     { name: 'Food', description: '식품 영양정보 조회 및 관리 API' },
     { name: 'Admin', description: '관리자 인증 확인 API' },
     { name: 'Health', description: '프로세스 및 데이터베이스 상태 확인 API' },
@@ -81,6 +83,18 @@ const openApiDocument = {
       },
     },
     schemas: {
+      ApiInfo: {
+        type: 'object',
+        required: ['name', 'version', 'endpoints'],
+        properties: {
+          name: { type: 'string', example: 'Food Nutrition API' },
+          version: { type: 'string', example: '1.0.0' },
+          endpoints: {
+            type: 'object',
+            additionalProperties: { type: 'string' },
+          },
+        },
+      },
       FoodCreate: foodCreate,
       FoodUpdate: foodUpdate,
       Food: {
@@ -137,6 +151,10 @@ const openApiDocument = {
           database: { type: 'string', example: 'ok' },
         },
       },
+      ApiInfoResponse: successSchema(
+        { $ref: '#/components/schemas/ApiInfo' },
+        RESULT_CODES.API_INFO_SUCCESS,
+      ),
       FoodResponse: successSchema(
         { $ref: '#/components/schemas/Food' },
         RESULT_CODES.FOOD_GET_SUCCESS,
@@ -176,6 +194,7 @@ const openApiDocument = {
     },
   },
   paths: {
+    ...apiPaths,
     ...foodPaths,
     ...adminPaths,
     ...healthPaths,

@@ -1,16 +1,21 @@
 const express = require('express');
-const foodController = require('../../controllers/foodController');
+const FoodController = require('../../controllers/foodController');
 const { requireAdmin } = require('../../middlewares/auth');
 
-function createFoodRoutes(adminKey) {
-  const router = express.Router();
-  const admin = requireAdmin(adminKey);
-  router.get('/', foodController.listFoods);
-  router.get('/:id', foodController.getFood);
-  router.post('/', admin, foodController.createFood);
-  router.patch('/:id', admin, foodController.updateFood);
-  router.delete('/:id', admin, foodController.deleteFood);
-  return router;
-}
+const router = express.Router();
 
-module.exports = createFoodRoutes;
+// 공개 라우트 -------------------------------------------------------------------------------
+// 검색 조건과 커서를 이용한 식품 목록 조회
+router.get('/', FoodController.listFoods);
+// 식품 ID를 이용한 상세 조회
+router.get('/:id', FoodController.getFood);
+
+// 관리자 보호 라우트 -------------------------------------------------------------------------
+// 새로운 식품 등록
+router.post('/', requireAdmin, FoodController.createFood);
+// 기존 식품의 전달된 필드만 수정
+router.patch('/:id', requireAdmin, FoodController.updateFood);
+// 식품 삭제
+router.delete('/:id', requireAdmin, FoodController.deleteFood);
+
+module.exports = router;
