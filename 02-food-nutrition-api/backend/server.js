@@ -20,6 +20,8 @@ function createApplication(adminKey = '', logging = true) {
   const app = express();
 
   app.disable('x-powered-by');
+  // 앞단의 Nginx 한 단계를 신뢰해 Rate Limit이 실제 클라이언트 IP를 사용하도록 한다.
+  app.set('trust proxy', 1);
   app.locals.adminKey = adminKey;
 
   // 공통 미들웨어 -----------------------------------------------------------------------------
