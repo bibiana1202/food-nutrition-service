@@ -19,10 +19,14 @@ const errorSchema = {
   required: ['success', 'code', 'message', 'details', 'request_id'],
   properties: {
     success: { type: 'boolean', const: false, example: false },
-    code: { type: 'string', example: RESULT_CODES.VALIDATION_ERROR.code },
-    message: { type: 'string', example: RESULT_CODES.VALIDATION_ERROR.message },
-    details: { type: 'array', items: { type: 'object' } },
-    request_id: { type: 'string', format: 'uuid' },
+    code: { type: 'string', description: '오류를 식별하는 Result Code' },
+    message: { type: 'string', description: '오류 안내 메시지' },
+    details: { type: 'array', items: { type: 'object' }, example: [] },
+    request_id: {
+      type: 'string',
+      format: 'uuid',
+      example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    },
   },
 };
 
@@ -41,7 +45,16 @@ const successSchema = (data, result) => ({
 const errorResponse = (result) => ({
   description: result.message,
   content: {
-    'application/json': { schema: { $ref: '#/components/schemas/Error' } },
+    'application/json': {
+      schema: { $ref: '#/components/schemas/Error' },
+      example: {
+        success: false,
+        code: result.code,
+        message: result.message,
+        details: [],
+        request_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+      },
+    },
   },
 });
 
