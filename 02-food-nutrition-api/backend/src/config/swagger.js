@@ -19,10 +19,14 @@ const errorSchema = {
   required: ['success', 'code', 'message', 'details', 'request_id'],
   properties: {
     success: { type: 'boolean', const: false, example: false },
-    code: { type: 'string', example: RESULT_CODES.VALIDATION_ERROR.code },
-    message: { type: 'string', example: RESULT_CODES.VALIDATION_ERROR.message },
-    details: { type: 'array', items: { type: 'object' } },
-    request_id: { type: 'string', format: 'uuid' },
+    code: { type: 'string', description: '오류를 식별하는 Result Code' },
+    message: { type: 'string', description: '오류 안내 메시지' },
+    details: { type: 'array', items: { type: 'object' }, example: [] },
+    request_id: {
+      type: 'string',
+      format: 'uuid',
+      example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    },
   },
 };
 
@@ -41,7 +45,16 @@ const successSchema = (data, result) => ({
 const errorResponse = (result) => ({
   description: result.message,
   content: {
-    'application/json': { schema: { $ref: '#/components/schemas/Error' } },
+    'application/json': {
+      schema: { $ref: '#/components/schemas/Error' },
+      example: {
+        success: false,
+        code: result.code,
+        message: result.message,
+        details: [],
+        request_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+      },
+    },
   },
 });
 
@@ -85,26 +98,62 @@ const openApiDocument = {
       FoodCreate: foodCreate,
       FoodUpdate: foodUpdate,
       Food: {
-        allOf: [
-          { $ref: '#/components/schemas/FoodCreate' },
-          {
-            type: 'object',
-            required: ['id', 'created_at', 'updated_at'],
-            properties: {
-              id: { type: 'integer', example: 1 },
-              created_at: {
-                type: 'string',
-                format: 'date-time',
-                example: '2026-09-08T07:00:00.000Z',
-              },
-              updated_at: {
-                type: 'string',
-                format: 'date-time',
-                example: '2026-09-08T07:00:00.000Z',
-              },
-            },
-          },
+        type: 'object',
+        description: '저장된 식품 기본 정보와 영양성분',
+        required: [
+          'id',
+          'food_cd',
+          'food_name',
+          'group_name',
+          'research_year',
+          'maker_name',
+          'ref_name',
+          'source_notes',
+          'serving_unit',
+          'serving_size',
+          'calorie',
+          'carbohydrate',
+          'protein',
+          'fat',
+          'sugars',
+          'sodium',
+          'cholesterol',
+          'saturated_fatty_acids',
+          'trans_fat',
+          'created_at',
+          'updated_at',
         ],
+        properties: {
+          id: { type: 'integer', example: 6760 },
+          food_cd: { type: 'string', example: 'D018000' },
+          food_name: { type: 'string', example: '가래떡' },
+          group_name: { type: ['string', 'null'], example: '곡류 및 서류' },
+          research_year: { type: ['integer', 'null'], example: 2020 },
+          maker_name: { type: ['string', 'null'], example: '전국(대표)' },
+          ref_name: { type: ['string', 'null'], example: '식품영양성분 자료집' },
+          source_notes: { type: ['string', 'null'], example: null },
+          serving_unit: { type: ['string', 'null'], enum: ['g', 'mL', null], example: 'g' },
+          serving_size: { type: ['number', 'null'], example: 100 },
+          calorie: { type: ['number', 'null'], example: 195.16 },
+          carbohydrate: { type: ['number', 'null'], example: 43.73 },
+          protein: { type: ['number', 'null'], example: 3.92 },
+          fat: { type: ['number', 'null'], example: 0.51 },
+          sugars: { type: ['number', 'null'], example: 0 },
+          sodium: { type: ['number', 'null'], example: 240.57 },
+          cholesterol: { type: ['number', 'null'], example: 0 },
+          saturated_fatty_acids: { type: ['number', 'null'], example: 0.19 },
+          trans_fat: { type: ['number', 'null'], example: 0 },
+          created_at: {
+            type: 'string',
+            format: 'date-time',
+            example: '2026-09-09T06:58:08.027Z',
+          },
+          updated_at: {
+            type: 'string',
+            format: 'date-time',
+            example: '2026-09-09T06:58:08.033Z',
+          },
+        },
       },
       FoodList: {
         type: 'object',
@@ -115,7 +164,7 @@ const openApiDocument = {
           next_cursor: {
             type: ['string', 'null'],
             description: '다음 조회에 전달할 cursor. 다음 데이터가 없으면 null',
-            example: '20',
+            example: '6779',
           },
           has_next: { type: 'boolean', example: true },
         },
