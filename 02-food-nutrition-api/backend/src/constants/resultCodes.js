@@ -2,7 +2,6 @@ const defineResult = (code, httpStatus, message) => Object.freeze({ code, httpSt
 
 const RESULT_CODES = Object.freeze({
   REQUEST_SUCCESS: defineResult('REQUEST_SUCCESS', 200, '요청을 처리했습니다.'),
-  API_INFO_SUCCESS: defineResult('API_INFO_SUCCESS', 200, 'API 정보 조회 성공'),
   FOOD_LIST_SUCCESS: defineResult('FOOD_LIST_SUCCESS', 200, '식품 목록 조회 성공'),
   FOOD_GET_SUCCESS: defineResult('FOOD_GET_SUCCESS', 200, '식품 상세 조회 성공'),
   FOOD_CREATED: defineResult('FOOD_CREATED', 201, '식품 등록 성공'),
