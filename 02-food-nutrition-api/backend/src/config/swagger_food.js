@@ -6,9 +6,47 @@ const idParameter = {
   schema: { type: 'integer', minimum: 1, example: 1 },
 };
 
-const json = (schema) => ({
-  'application/json': { schema },
+const json = (schema, example) => ({
+  'application/json': { schema, ...(example ? { example } : {}) },
 });
+
+// 실제 목록 조회 응답과 같은 형태를 보여주는 대표 식품 예시다.
+const foodExample = {
+  id: 6760,
+  food_cd: 'D018000',
+  food_name: '가래떡',
+  group_name: '곡류 및 서류',
+  research_year: 2020,
+  maker_name: '전국(대표)',
+  ref_name: '식품영양성분 자료집',
+  source_notes: null,
+  serving_unit: 'g',
+  serving_size: 100,
+  calorie: 195.16,
+  carbohydrate: 43.73,
+  protein: 3.92,
+  fat: 0.51,
+  sugars: 0,
+  sodium: 240.57,
+  cholesterol: 0,
+  saturated_fatty_acids: 0.19,
+  trans_fat: 0,
+  created_at: '2026-09-09T06:58:08.027Z',
+  updated_at: '2026-09-09T06:58:08.033Z',
+};
+
+const foodListExample = {
+  success: true,
+  code: 'FOOD_LIST_SUCCESS',
+  message: '식품 목록 조회 성공',
+  data: {
+    items: [foodExample],
+    page_size: 20,
+    next_cursor: '6760',
+    has_next: true,
+  },
+  request_id: '04895a54-badc-4edf-85b0-3a8be9cd6223',
+};
 
 module.exports = {
   '/api/foods': {
@@ -57,7 +95,7 @@ module.exports = {
       responses: {
         200: {
           description: '조회 성공',
-          content: json({ $ref: '#/components/schemas/FoodListResponse' }),
+          content: json({ $ref: '#/components/schemas/FoodListResponse' }, foodListExample),
         },
         400: { $ref: '#/components/responses/BadRequest' },
         429: { $ref: '#/components/responses/TooManyRequests' },
