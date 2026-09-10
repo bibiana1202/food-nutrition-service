@@ -39,11 +39,14 @@ function cellText(value) {
   if (value === null || value === undefined) return null;
   if (typeof value === 'string' || typeof value === 'number') {
     const text = String(value).trim();
+    // 결측 표기(빈 문자열, '-', 'N/A' 등)는 값이 있는 셀과 구분해 null로 통일한다.
     return missing.has(text.toUpperCase()) ? null : text;
   }
+  // 서식이 섞인 문자열은 스타일을 버리고 이어붙인 텍스트만 취해 같은 규칙을 다시 적용한다.
   if (typeof value === 'object' && 'richText' in value)
     return cellText(value.richText.map((part) => part.text).join(''));
   if (typeof value === 'object' && 'formula' in value) {
+    // 수식을 다시 계산하지 않고 엑셀이 저장해 둔 결과값만 읽는다.
     if (value.result === undefined) throw new Error('계산 결과가 없는 수식 셀');
     return cellText(value.result);
   }
@@ -59,6 +62,7 @@ function cellText(value) {
  */
 function numericValue(text) {
   if (text === null) return null;
+  // 정수, 소수, '1,234' 같은 천 단위 구분 표기만 허용해 '1,2'나 '12mg' 같은 값을 걸러낸다.
   if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/.test(text))
     throw new Error(`올바르지 않은 숫자: ${text}`);
   const number = Number(text.replaceAll(',', ''));
@@ -97,7 +101,8 @@ async function importFoods(filename) {
           const notes = [];
           for (const [field, title] of Object.entries(columnMapping)) {
             const text = cellText(row.getCell(columns.get(normalizeHeader(title))).value);
-            // '1g 미만'처럼 확정할 수 없는 수치는 null로 저장하고 원문을 별도로 보존한다.
+            // '1g 미만'처럼 한정 표현이 붙은 영양성분은 확정 수치로 만들지 않고
+            // null로 저장한 뒤 원문을 source_notes에 보존한다.
             if (
               nutrientFields.includes(field) &&
               text &&
@@ -106,6 +111,7 @@ async function importFoods(filename) {
               values[field] = null;
               notes.push(`${field}: ${text}`);
             } else
+              // 연도와 영양성분만 숫자로 변환하고, 나머지 텍스트 필드는 그대로 둔다.
               values[field] =
                 field === 'research_year' || nutrientFields.includes(field)
                   ? numericValue(text)
