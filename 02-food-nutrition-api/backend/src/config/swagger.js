@@ -42,18 +42,37 @@ const successSchema = (data, result) => ({
   },
 });
 
+const errorExample = (result) => ({
+  success: false,
+  code: result.code,
+  message: result.message,
+  details: [],
+  request_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+});
+
 const errorResponse = (result) => ({
   description: result.message,
   content: {
     'application/json': {
       schema: { $ref: '#/components/schemas/Error' },
-      example: {
-        success: false,
-        code: result.code,
-        message: result.message,
-        details: [],
-        request_id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
-      },
+      example: errorExample(result),
+    },
+  },
+});
+
+// 같은 HTTP 상태에서 서로 다른 code가 나올 수 있는 응답은 예시를 여러 개 등록해
+// Swagger UI에서 각 code별 실제 응답 형태를 확인할 수 있게 한다.
+const multiErrorResponse = (description, results) => ({
+  description,
+  content: {
+    'application/json': {
+      schema: { $ref: '#/components/schemas/Error' },
+      examples: Object.fromEntries(
+        results.map((result) => [
+          result.code,
+          { summary: result.message, value: errorExample(result) },
+        ]),
+      ),
     },
   },
 });
@@ -219,10 +238,22 @@ const openApiDocument = {
     },
     responses: {
       BadRequest: errorResponse(RESULT_CODES.VALIDATION_ERROR),
+      // 본문이 있는 요청은 검증 실패(VALIDATION_ERROR)뿐 아니라 JSON 파싱 실패(INVALID_JSON)로도 400이 될 수 있다.
+      BadRequestBody: multiErrorResponse('요청 본문 검증 실패 또는 잘못된 JSON', [
+        RESULT_CODES.VALIDATION_ERROR,
+        RESULT_CODES.INVALID_JSON,
+      ]),
       Unauthorized: errorResponse(RESULT_CODES.ADMIN_AUTH_REQUIRED),
       NotFound: errorResponse(RESULT_CODES.FOOD_NOT_FOUND),
       Conflict: errorResponse(RESULT_CODES.DUPLICATE_FOOD_CODE),
+      PayloadTooLarge: errorResponse(RESULT_CODES.PAYLOAD_TOO_LARGE),
       TooManyRequests: errorResponse(RESULT_CODES.RATE_LIMIT_EXCEEDED),
+      AdminKeyNotConfigured: errorResponse(RESULT_CODES.ADMIN_KEY_NOT_CONFIGURED),
+      // 관리자 키 미설정과 DB 잠금 대기·교착은 둘 다 503이지만 원인이 다르므로 함께 보여준다.
+      ServiceUnavailable: multiErrorResponse('관리자 키 미설정 또는 일시적 DB 오류', [
+        RESULT_CODES.ADMIN_KEY_NOT_CONFIGURED,
+        RESULT_CODES.DATABASE_BUSY,
+      ]),
     },
   },
   paths: {

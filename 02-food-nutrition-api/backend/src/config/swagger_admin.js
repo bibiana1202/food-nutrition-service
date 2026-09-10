@@ -16,6 +16,7 @@ module.exports = {
         },
         401: { $ref: '#/components/responses/Unauthorized' },
         429: { $ref: '#/components/responses/TooManyRequests' },
+        503: { $ref: '#/components/responses/AdminKeyNotConfigured' },
       },
     },
   },
