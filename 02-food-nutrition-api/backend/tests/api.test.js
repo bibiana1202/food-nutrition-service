@@ -100,6 +100,7 @@ test('없는 리소스는 일관된 404 응답', async () => {
   assert.equal(body.success, false);
   assert.equal(body.code, 'FOOD_NOT_FOUND');
   assert.equal(body.request_id, response.headers.get('x-request-id'));
+  assert.equal((await request('/api')).body.code, 'ROUTE_NOT_FOUND');
 });
 
 test('잘못된 입력과 쿼리를 거부', async () => {
@@ -127,9 +128,6 @@ test('쓰기 인증과 공개 조회 및 헬스 체크', async () => {
   assert.equal((await request('/api/foods', 'POST', payload, null)).response.status, 401);
   assert.equal((await request('/api/foods', 'POST', payload, 'wrong')).response.status, 401);
   assert.equal((await request('/api/foods', 'GET', undefined, null)).response.status, 200);
-  const apiInfo = await request('/api', 'GET', undefined, null);
-  assert.equal(apiInfo.body.code, 'API_INFO_SUCCESS');
-  assert.equal(apiInfo.body.data.endpoints.foods, '/api/foods');
   assert.equal((await request('/api/admin/verify', 'POST')).response.status, 200);
   assert.equal((await request('/health/ready')).response.status, 200);
   assert.ok((await request('/api/docs-json')).body.paths['/api/foods']);

@@ -4,7 +4,6 @@ const RESULT_CODES = require('../constants/resultCodes');
 const { foodCreateSchema, foodPatchSchema } = require('../utils/validator');
 
 const adminPaths = require('./swagger_admin');
-const apiPaths = require('./swagger_api');
 const foodPaths = require('./swagger_food');
 const healthPaths = require('./swagger_health');
 
@@ -70,7 +69,6 @@ const openApiDocument = {
   },
   servers: [{ url: serverUrl, description: serverDescription }],
   tags: [
-    { name: 'System', description: 'API 기본 정보' },
     { name: 'Food', description: '식품 영양정보 조회 및 관리 API' },
     { name: 'Admin', description: '관리자 인증 확인 API' },
     { name: 'Health', description: '프로세스 및 데이터베이스 상태 확인 API' },
@@ -84,41 +82,65 @@ const openApiDocument = {
       },
     },
     schemas: {
-      ApiInfo: {
-        type: 'object',
-        required: ['name', 'version', 'endpoints'],
-        properties: {
-          name: { type: 'string', example: 'Food Nutrition API' },
-          version: { type: 'string', example: '1.0.0' },
-          endpoints: {
-            type: 'object',
-            additionalProperties: { type: 'string' },
-          },
-        },
-      },
       FoodCreate: foodCreate,
       FoodUpdate: foodUpdate,
       Food: {
-        allOf: [
-          { $ref: '#/components/schemas/FoodCreate' },
-          {
-            type: 'object',
-            required: ['id', 'created_at', 'updated_at'],
-            properties: {
-              id: { type: 'integer', example: 1 },
-              created_at: {
-                type: 'string',
-                format: 'date-time',
-                example: '2026-09-08T07:00:00.000Z',
-              },
-              updated_at: {
-                type: 'string',
-                format: 'date-time',
-                example: '2026-09-08T07:00:00.000Z',
-              },
-            },
-          },
+        type: 'object',
+        description: '저장된 식품 기본 정보와 영양성분',
+        required: [
+          'id',
+          'food_cd',
+          'food_name',
+          'group_name',
+          'research_year',
+          'maker_name',
+          'ref_name',
+          'source_notes',
+          'serving_unit',
+          'serving_size',
+          'calorie',
+          'carbohydrate',
+          'protein',
+          'fat',
+          'sugars',
+          'sodium',
+          'cholesterol',
+          'saturated_fatty_acids',
+          'trans_fat',
+          'created_at',
+          'updated_at',
         ],
+        properties: {
+          id: { type: 'integer', example: 6760 },
+          food_cd: { type: 'string', example: 'D018000' },
+          food_name: { type: 'string', example: '가래떡' },
+          group_name: { type: ['string', 'null'], example: '곡류 및 서류' },
+          research_year: { type: ['integer', 'null'], example: 2020 },
+          maker_name: { type: ['string', 'null'], example: '전국(대표)' },
+          ref_name: { type: ['string', 'null'], example: '식품영양성분 자료집' },
+          source_notes: { type: ['string', 'null'], example: null },
+          serving_unit: { type: ['string', 'null'], enum: ['g', 'mL', null], example: 'g' },
+          serving_size: { type: ['number', 'null'], example: 100 },
+          calorie: { type: ['number', 'null'], example: 195.16 },
+          carbohydrate: { type: ['number', 'null'], example: 43.73 },
+          protein: { type: ['number', 'null'], example: 3.92 },
+          fat: { type: ['number', 'null'], example: 0.51 },
+          sugars: { type: ['number', 'null'], example: 0 },
+          sodium: { type: ['number', 'null'], example: 240.57 },
+          cholesterol: { type: ['number', 'null'], example: 0 },
+          saturated_fatty_acids: { type: ['number', 'null'], example: 0.19 },
+          trans_fat: { type: ['number', 'null'], example: 0 },
+          created_at: {
+            type: 'string',
+            format: 'date-time',
+            example: '2026-09-09T06:58:08.027Z',
+          },
+          updated_at: {
+            type: 'string',
+            format: 'date-time',
+            example: '2026-09-09T06:58:08.033Z',
+          },
+        },
       },
       FoodList: {
         type: 'object',
@@ -129,7 +151,7 @@ const openApiDocument = {
           next_cursor: {
             type: ['string', 'null'],
             description: '다음 조회에 전달할 cursor. 다음 데이터가 없으면 null',
-            example: '20',
+            example: '6779',
           },
           has_next: { type: 'boolean', example: true },
         },
@@ -152,10 +174,6 @@ const openApiDocument = {
           database: { type: 'string', example: 'ok' },
         },
       },
-      ApiInfoResponse: successSchema(
-        { $ref: '#/components/schemas/ApiInfo' },
-        RESULT_CODES.API_INFO_SUCCESS,
-      ),
       FoodResponse: successSchema(
         { $ref: '#/components/schemas/Food' },
         RESULT_CODES.FOOD_GET_SUCCESS,
@@ -195,7 +213,6 @@ const openApiDocument = {
     },
   },
   paths: {
-    ...apiPaths,
     ...foodPaths,
     ...adminPaths,
     ...healthPaths,

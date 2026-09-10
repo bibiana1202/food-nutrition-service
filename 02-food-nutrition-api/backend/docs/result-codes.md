@@ -7,7 +7,6 @@ API는 HTTP 상태 코드와 별도로 안정적인 문자열 `code`를 반환�
 | HTTP | Code                | 설명                       |
 | ---- | ------------------- | -------------------------- |
 | 200  | `REQUEST_SUCCESS`   | 일반 요청 성공             |
-| 200  | `API_INFO_SUCCESS`  | API 정보 조회 성공         |
 | 200  | `FOOD_LIST_SUCCESS` | 식품 목록 조회 성공        |
 | 200  | `FOOD_GET_SUCCESS`  | 식품 상세 조회 성공        |
 | 201  | `FOOD_CREATED`      | 식품 등록 성공             |
