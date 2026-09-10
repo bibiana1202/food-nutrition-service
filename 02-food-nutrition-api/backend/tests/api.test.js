@@ -100,6 +100,12 @@ test('없는 리소스는 일관된 404 응답', async () => {
   assert.equal(body.success, false);
   assert.equal(body.code, 'FOOD_NOT_FOUND');
   assert.equal(body.request_id, response.headers.get('x-request-id'));
+  const patched = await request('/api/foods/999999', 'PATCH', { calorie: 1 });
+  assert.equal(patched.response.status, 404);
+  assert.equal(patched.body.code, 'FOOD_NOT_FOUND');
+  const deleted = await request('/api/foods/999999', 'DELETE');
+  assert.equal(deleted.response.status, 404);
+  assert.equal(deleted.body.code, 'FOOD_NOT_FOUND');
   assert.equal((await request('/api')).body.code, 'ROUTE_NOT_FOUND');
 });
 
