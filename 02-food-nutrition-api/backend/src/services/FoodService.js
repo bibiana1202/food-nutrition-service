@@ -1,4 +1,4 @@
-const { Op, fn, col, where: sqlWhere } = require('sequelize');
+const { Op, fn, col, where: sqlWhere, UniqueConstraintError } = require('sequelize');
 const RESULT_CODES = require('../constants/resultCodes');
 const { Food } = require('../models');
 const { ApiError } = require('../middlewares/errorHandler');
@@ -60,9 +60,19 @@ class FoodService {
 
   /**
    * 식품을 등록하고 DB에 저장된 최종 데이터를 반환한다.
+   *
+   * @throws {ApiError} food_cd가 이미 존재하면 DUPLICATE_FOOD_CODE
    */
   async create(input) {
-    const food = await Food.create(input);
+    let food;
+    try {
+      food = await Food.create(input);
+    } catch (error) {
+      // food_cd UNIQUE 제약 위반만 구체적인 코드로 변환한다. 다른 UNIQUE 제약(다른 테이블 등)이
+      // 생기더라도 여기는 "식품 등록"이라는 맥락을 알고 있으므로 오판 없이 정확히 판단할 수 있다.
+      if (error instanceof UniqueConstraintError) throw new ApiError(RESULT_CODES.DUPLICATE_FOOD_CODE);
+      throw error;
+    }
     return this.get(food.id);
   }
 
