@@ -23,4 +23,3 @@ coverage/
 # Keep original Word files locally; the Markdown task text is sufficient in Git.
 *.docx
 /docs/
-01-look-and-say/

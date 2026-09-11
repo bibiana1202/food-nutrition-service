@@ -1,0 +1,9 @@
+{
+  "name": "look-and-say-middle",
+  "version": "1.0.0",
+  "private": true,
+  "description": "개미수열의 가운데 두 자리 계산",
+  "main": "solution.js",
+  "scripts": { "start": "node solution.js", "test": "node --test" },
+  "engines": { "node": ">=18" }
+}
