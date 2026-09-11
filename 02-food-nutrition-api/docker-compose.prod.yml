@@ -1,0 +1,19 @@
+services:
+  db:
+    env_file: !override
+      - path: ./backend/.env.production
+        required: true
+
+  api:
+    env_file: !override
+      - path: ./backend/.env.production
+        required: true
+    environment:
+      NODE_ENV: production
+
+  seed:
+    env_file: !override
+      - path: ./backend/.env.production
+        required: true
+    environment:
+      NODE_ENV: production

@@ -131,35 +131,6 @@ npm run build
 VITE_API_BASE_URL=https://api.example.com npm run build
 ```
 
-## AWS 배포 준비
-
-이 프로젝트는 EC2 단일 인스턴스에서 Docker Compose로 실행할 수 있도록 구성했다. 현재는 로컬 구현과 컨테이너 검증까지 완료했으며, AWS 계정에 리소스를 생성하거나 실제 배포하지는 않았다.
-
-### 배포 구조
-
-```text
-브라우저 → HTTPS 프록시 → Express + React 정적 파일
-                                ↓
-                       MariaDB / Docker volume
-```
-
-단일 EC2 구성에서는 Docker Compose로 API와 MariaDB를 함께 실행할 수 있다. 실제 운영에서는 API와 Amazon RDS for MariaDB를 분리하면 백업, 장애 복구와 수평 확장이 수월하다.
-
-### 배포 순서
-
-1. 리전, 인스턴스, 디스크, 도메인, 운영 기간과 비용 범위를 정한다. 소스 빌드와 엑셀 적재의 메모리 사용량도 고려한다.
-2. EC2에 Docker Engine과 Compose v2를 설치한다. AWS의 [EC2에서 Docker 설치 안내](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-container-image.html)를 참고한다.
-3. `.env.production.example`을 기준으로 운영 값을 AWS Secrets Manager, Parameter Store 또는 컨테이너 실행 환경에 등록한다. 충분히 긴 새 관리자 키를 사용한다.
-4. 새 이미지에서 `npm run db:migrate`를 한 번 실행하고 성공한 경우에만 API를 `npm start`로 교체한다. 데이터가 비어 있는 최초 배포에서는 별도 작업으로 `npm run db:seed`를 실행하고 `npm run db:verify`로 확인한다.
-5. 인스턴스의 HTTPS 프록시를 `127.0.0.1:3000`으로 연결하고 도메인 인증서를 설정한다. 외부에서는 HTTPS로만 관리자 키를 전달한다.
-6. [EC2 보안 그룹](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-security-groups.html)은 공개 HTTPS와 필요한 관리 접근만 허용한다. API의 3000 포트는 외부에 직접 공개하지 않으며 기본 Compose도 `127.0.0.1`에만 바인딩한다.
-7. DB 볼륨의 백업과 복구, 로그 수집, 프록시의 실제 클라이언트 IP 전달 및 요청 제한 동작을 점검한다.
-8. 헬스 체크, API 검색, 관리자 변경 작업과 컨테이너 재시작 후 데이터 보존을 확인한 뒤 실제 운영 URL을 README에 추가한다.
-
-다른 머신에서 컨테이너 이미지를 만들었다면 EC2의 CPU 아키텍처와 일치해야 한다. ECR을 사용할 때는 이미지 태그를 커밋 SHA로 관리하고 서버에서 해당 이미지를 내려받는 방식으로 확장할 수 있다.
-
-DB는 `mariadb-dump` 또는 RDS 자동 백업을 사용하고 정기적으로 복구 절차까지 검증해야 한다. 실제 배포 전에는 AWS 계정, 리전, 예산, 도메인과 접속 방식을 확정하고 HTTPS, 백업과 외부 운영 환경을 별도로 검증해야 한다.
-
 # 구현 보고서
 
 ## 1. 데이터 적재
@@ -590,6 +561,14 @@ ok 14 - 원본 7,683건 적재와 재실행 멱등성
 
 ## 5. 배포
 
+이 프로젝트는 EC2 단일 인스턴스에서 Docker Compose로 실행할 수 있도록 구성했다. 현재는 로컬 구현과 컨테이너 검증까지 완료했으며, AWS 계정에 리소스를 생성하거나 실제 배포하지는 않았다.
+
+서버 부트스트랩 먼저(수동): git clone → backend/.env.production 채우기 → docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build를 손으로 한 번 돌려서 EC2에서 실제로 뜨는지 확인 (이건 보고서에 "실제 EC2 환경에서 검증" 근거로도 쓸 수 있어요)
+배포 전용 SSH 키 생성 → 공개키는 서버 ~/.ssh/authorized_keys에 추가
+GitHub Secrets 등록 (EC2_HOST, EC2_USER, EC2_SSH_KEY)
+anna → main 머지 → CI 통과 후 CD가 자동으로 SSH 접속해 git reset --hard origin/main + 재빌드 — 이미 1번에서 세팅해놨으니 그냥 조용히 성공해야 정상
+
+
 ### 구성
 
 | 파일 | 역할 |
@@ -597,15 +576,57 @@ ok 14 - 원본 7,683건 적재와 재실행 멱등성
 | `backend/Dockerfile` | Express API 이미지. 의존성 설치와 실행 단계를 분리한 멀티스테이지 빌드 |
 | `frontend/Dockerfile` | React 관리자 화면 이미지. Node로 빌드하고 Nginx로 정적 파일을 제공 |
 | `docker-compose.yml` | DB·API·프런트엔드·시드 4개 서비스를 함께 실행하는 로컬 통합 구성 |
+| `docker-compose.prod.yml` | 운영에서 `docker-compose.yml`과 함께 지정하는 override. `backend/.env.production`을 읽고 `NODE_ENV=production`으로 덮어쓴다 |
 | `backend/.env.local.example`, `backend/.env.production.example` | 백엔드 로컬·운영 환경변수 예시 |
 | `frontend/.env.local.example`, `frontend/.env.production.example` | 프런트엔드 로컬·운영 환경변수 예시 |
 | `backend/.dockerignore`, `frontend/.dockerignore` | `node_modules` 등을 빌드 컨텍스트에서 제외 |
+| `.github/workflows/deploy.yml` | `main`에서 CI(`ci.yml`)가 성공한 뒤 SSH로 EC2에 접속해 배포하는 CD 워크플로 |
 
 `backend/Dockerfile`은 `npm ci --omit=dev`로 의존성만 설치하는 단계와 실행 단계를 분리해 `devDependencies`(Prettier 등)와 `tests/`가 최종 이미지에 들어가지 않는다. 비루트 사용자(`USER node`)로 실행하고, `HEALTHCHECK`가 `/health/ready`를 주기적으로 확인해 DB 연결까지 정상일 때만 컨테이너를 "healthy"로 표시한다.
 
 `frontend/Dockerfile`도 Node 빌드 단계와 Nginx 서빙 단계를 분리한다. `nginx.conf`가 `/api`, `/api/`, `/health/`로 들어오는 요청을 `http://api:3000`으로 프록시하고, 나머지 경로는 `index.html`로 넘겨 React Router의 클라이언트 라우팅을 지원한다.
 
 **외부 의존성 구성**: 이 서비스의 유일한 외부 의존성은 MariaDB다. `docker-compose.yml`의 `db` 서비스가 이를 함께 실행하며, `api`와 `seed` 서비스는 `depends_on: db: { condition: service_healthy }`로 DB의 헬스체크(`healthcheck.sh --connect --innodb_initialized`)가 통과한 뒤에만 시작한다. `frontend`도 같은 방식으로 `api`가 healthy할 때까지 기다린다. 별도의 대기 스크립트 없이 Compose의 `depends_on`과 헬스체크만으로 기동 순서를 보장했다.
+
+### 배포 구조
+
+```text
+브라우저 → HTTPS 프록시 → Express + React 정적 파일
+                                ↓
+                       MariaDB / Docker volume
+```
+
+단일 EC2 구성에서는 Docker Compose로 API와 MariaDB를 함께 실행할 수 있다. 실제 운영에서는 API와 Amazon RDS for MariaDB를 분리하면 백업, 장애 복구와 수평 확장이 수월하다.
+
+### 배포 순서
+
+1. 리전, 인스턴스, 디스크, 도메인, 운영 기간과 비용 범위를 정한다. 소스 빌드와 엑셀 적재의 메모리 사용량도 고려한다.
+2. EC2에 Docker Engine과 Compose v2를 설치한다. AWS의 [EC2에서 Docker 설치 안내](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/create-container-image.html)를 참고한다.
+3. `.env.production.example`을 기준으로 `backend/.env.production`을 서버에 직접 만들고 운영 값을 채운다. 이 파일은 git에 올리지 않으며 `docker-compose.prod.yml`이 이를 읽는다. 충분히 긴 새 관리자 키를 사용한다. 서버가 여러 대이거나 규모가 커지면 AWS Secrets Manager나 Parameter Store로 옮기는 편이 낫다.
+4. 새 이미지에서 `npm run db:migrate`를 한 번 실행하고 성공한 경우에만 API를 `npm start`로 교체한다. 데이터가 비어 있는 최초 배포에서는 별도 작업으로 `npm run db:seed`를 실행하고 `npm run db:verify`로 확인한다.
+5. 인스턴스의 HTTPS 프록시를 `127.0.0.1:8080`(프런트엔드 컨테이너)으로 연결하고 도메인 인증서를 설정한다. `/api`는 프런트엔드 Nginx가 다시 API 컨테이너로 프록시하므로 API 포트(3000)를 직접 바라볼 필요가 없다. 외부에서는 HTTPS로만 관리자 키를 전달한다.
+6. [EC2 보안 그룹](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-security-groups.html)은 공개 HTTPS와 필요한 관리 접근만 허용한다. API의 3000 포트는 외부에 직접 공개하지 않으며 기본 Compose도 `127.0.0.1`에만 바인딩한다.
+7. DB 볼륨의 백업과 복구, 로그 수집, 프록시의 실제 클라이언트 IP 전달 및 요청 제한 동작을 점검한다.
+8. 헬스 체크, API 검색, 관리자 변경 작업과 컨테이너 재시작 후 데이터 보존을 확인한 뒤 실제 운영 URL을 README에 추가한다.
+9. 이후 `main`에 대한 갱신은 `.github/workflows/deploy.yml`이 자동으로 처리한다. 구체적인 동작과 한계는 아래 [지속적 배포 (CD)](#지속적-배포-cd)에 정리했다.
+
+다른 머신에서 컨테이너 이미지를 만들었다면 EC2의 CPU 아키텍처와 일치해야 한다. ECR을 사용할 때는 이미지 태그를 커밋 SHA로 관리하고 서버에서 해당 이미지를 내려받는 방식으로 확장할 수 있다.
+
+DB는 `mariadb-dump` 또는 RDS 자동 백업을 사용하고 정기적으로 복구 절차까지 검증해야 한다. 실제 배포 전에는 AWS 계정, 리전, 예산, 도메인과 접속 방식을 확정하고 HTTPS, 백업과 외부 운영 환경을 별도로 검증해야 한다.
+
+### 지속적 배포 (CD)
+
+`docker-compose.yml` 하나만으로는 로컬 실행을 가정한 `backend/.env.local`과 `NODE_ENV=local`이 항상 적용된다. 운영에서는 override 파일을 함께 지정해 이 두 값을 운영용으로 바꾼다.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+`.github/workflows/deploy.yml`은 `workflow_run`으로 기존 CI(`ci.yml`)의 `main` 실행 결과를 구독하고, `conclusion == 'success'`일 때만 배포 잡을 실행한다. 즉 테스트를 통과하지 못한 커밋은 배포 대상에서 자동으로 제외된다. 배포 잡은 `appleboy/ssh-action`으로 EC2에 접속해 `git fetch`·`git reset --hard origin/main`으로 서버의 소스를 `main`과 정확히 맞춘 뒤 위 override 명령으로 이미지를 재빌드하고, `docker image prune -f`로 이전 이미지를 정리한다.
+
+접속 정보(`EC2_HOST`, `EC2_USER`)와 배포 전용 SSH 개인키(`EC2_SSH_KEY`)는 GitHub Actions Secrets에만 저장하며 저장소에는 올리지 않는다. 개인 SSH 키와 분리한 배포 전용 키를 서버의 `authorized_keys`에 별도로 등록해, 이 키가 노출되어도 다른 접근 권한에는 영향이 없도록 했다.
+
+`docker compose config`로 override 병합 결과를 직접 확인하는 과정에서, Compose가 `env_file` 목록을 완전히 교체하지 않고 두 파일을 이어붙인다는 점을 확인했다. `backend/.env.production`에 없는 키는 base의 `backend/.env.local` 값이 그대로 남는다. 실제로 `.env.production.example`에 `MARIADB_ROOT_PASSWORD`가 빠져 있어 로컬 루트 비밀번호가 새어 들어오는 것을 이 방식으로 발견해 두 예시 파일의 키를 맞췄다. `NODE_ENV`처럼 `environment:`에 직접 적는 값은 키 단위로 병합·override되어 문제가 없었다.
 
 ### 실행 결과
 
@@ -640,11 +661,13 @@ GET http://localhost:8080/api/foods   (프런트엔드 Nginx를 경유)
 
 ### 현재 한계와 개선 방향
 
-실제 AWS 리소스 생성과 배포는 진행하지 않았다. 배포 구조와 순서는 위 [AWS 배포 준비](#aws-배포-준비)에 정리했지만, 실제 EC2·도메인·HTTPS 환경에서 검증하지는 못했다.
+실제 AWS 리소스 생성과 배포는 진행하지 않았다. 배포 구조와 순서는 위 [배포 순서](#배포-순서)에 정리했지만, 실제 EC2·도메인·HTTPS 환경에서 검증하지는 못했다.
 
 현재 Compose 구성은 API와 DB를 같은 호스트에서 실행하는 것을 전제로 한다. 운영 규모가 커지면 README에도 적었듯 DB를 Amazon RDS 같은 별도 관리형 서비스로 분리하는 편이 백업·장애 복구·수평 확장에 유리하다.
 
 외부 의존성이 MariaDB 하나뿐이라 Compose의 기본 `depends_on`/헬스체크만으로 충분했다. 캐시나 메시지 큐처럼 의존성이 늘어나면 시작 순서와 재시도 로직을 더 정교하게 다뤄야 할 수 있다.
+
+CD 워크플로(`deploy.yml`)는 구성만 마쳤고 실제 EC2 환경에서 실행해 검증하지는 못했다. 최초 클론과 `.env.production` 배치는 여전히 수동으로 한 번 해야 하며, 이후 `main` 갱신만 자동화된다. 또한 배포 잡이 서버 소스를 `git reset --hard origin/main`으로 강제 일치시키므로 서버에는 `git`으로 추적되지 않는 변경을 남기면 안 된다. SSH 접속은 GitHub Actions 러너의 아웃바운드 IP가 유동적이라 특정 IP로 제한하기 어려워, 배포 전용 키 분리와 키 기반 인증으로 위험을 줄였다. 규모가 커지면 포트를 열지 않는 AWS SSM Session Manager나 CodeDeploy 방식으로 바꾸는 편이 더 안전하다.
 
 ## 6. 소감
 
