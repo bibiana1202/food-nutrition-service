@@ -4,6 +4,15 @@
   "private": true,
   "description": "개미수열의 가운데 두 자리 계산",
   "main": "solution.js",
-  "scripts": { "start": "node solution.js", "test": "node --test" },
-  "engines": { "node": ">=18" }
+  "scripts": {
+    "start": "node solution.js",
+    "test": "node --test test/solution.test.js",
+    "test:jest": "jest test/solution1.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "jest": "^30.5.1"
+  }
 }
