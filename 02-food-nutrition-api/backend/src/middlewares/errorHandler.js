@@ -30,9 +30,11 @@ function errorHandler(exception, request, response, _next) {
       RESULT_CODES.VALIDATION_ERROR,
       exception.issues.map((issue) => ({ field: issue.path.join('.'), message: issue.message })),
     );
-  } else if (exception?.type === 'entity.parse.failed') { // JSON 파싱 실패
+  } else if (exception?.type === 'entity.parse.failed') {
+    // JSON 파싱 실패
     error = new ApiError(RESULT_CODES.INVALID_JSON);
-  } else if (exception?.type === 'entity.too.large') { // payload 크기 초과
+  } else if (exception?.type === 'entity.too.large') {
+    // payload 크기 초과
     error = new ApiError(RESULT_CODES.PAYLOAD_TOO_LARGE);
   } else if (
     // 잠금 대기 초과와 교착 상태는 잠시 후 재시도할 수 있는 일시적 DB 오류로 처리한다.
