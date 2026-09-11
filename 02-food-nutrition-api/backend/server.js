@@ -20,8 +20,12 @@ function createApplication(adminKey = '', logging = true) {
   const app = express();
 
   app.disable('x-powered-by');
-  // 앞단의 Nginx 한 단계를 신뢰해 Rate Limit이 실제 클라이언트 IP를 사용하도록 한다.
-  app.set('trust proxy', 1);
+  // 로컬은 프런트엔드 컨테이너 Nginx 1단계, 
+  // 운영은 호스트 Nginx(HTTPS 종료) + 프런트엔드 컨테이너 Nginx까지 2단계를 거치므로 
+  // 환경마다 실제 프록시 단계 수만큼만 신뢰해야 한다. 
+  // 신뢰 단계를 실제보다 적게 잡으면 Rate Limit이 중간 프록시 IP 하나로 뭉뚱그려져 모든 사용자가 같은 제한을
+  // 공유하고, 반대로 필요 이상으로 크게 잡으면 클라이언트가 X-Forwarded-For를 조작해 Rate Limit을 우회할 수 있다.
+  app.set('trust proxy', process.env.NODE_ENV === 'production' ? 2 : 1);
   app.locals.adminKey = adminKey;
 
   // 공통 미들웨어 -----------------------------------------------------------------------------
