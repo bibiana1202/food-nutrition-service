@@ -6,11 +6,7 @@ Express API와 React 관리자 화면을 독립 애플리케이션으로 구성�
 
 필드별 API 명세와 실행 가능한 예시는 Swagger UI에서 확인할 수 있다.
 
-
-
-Available authorizations : ADMIN_API_KEY=ce04bc178c8183bc740717929be157c2180725d0737e84190fb2f31665970a97
-
-
+> **보안 주의**: 이 저장소는 public이다. `ADMIN_API_KEY`는 절대 이 문서나 `.env.*.example` 파일에 실제 값으로 적지 않는다. 로컬 개발은 `backend/.env.local.example`을 복사해 본인이 직접 새 값을 채우고, 운영은 `backend/.env.production.example`을 기준으로 서버에서 직접 새 값을 생성해 채운다(`openssl rand -hex 32` 등). 채점 등으로 실제 키 값이 필요하면 이 README가 아니라 이메일로 전달한다.
 ## 구조
 
 ```text
