@@ -2,7 +2,14 @@
 
 Express API와 React 관리자 화면을 독립 애플리케이션으로 구성했다. 백엔드는 제공된 엑셀 7,683건을 MariaDB에 적재하고 식품 검색, 조회, 생성, 수정, 삭제 API를 제공한다.
 
-요구사항별 구현 내용과 검증 결과는 아래 [구현 보고서](#구현-보고서)에 순서대로 정리한다. 필드별 API 명세와 실행 가능한 예시는 Swagger UI에서 확인할 수 있다.
+요구사항별 구현 내용과 검증 결과는 아래 [구현 보고서](#구현-보고서)에 순서대로 정리한다. 
+
+필드별 API 명세와 실행 가능한 예시는 Swagger UI에서 확인할 수 있다.
+
+
+
+Available authorizations : ADMIN_API_KEY=ce04bc178c8183bc740717929be157c2180725d0737e84190fb2f31665970a97
+
 
 ## 구조
 
@@ -48,6 +55,23 @@ docker compose up -d
 - 준비 상태: http://localhost:3000/health/ready
 
 프런트엔드 Nginx가 `/api`와 `/health` 요청을 API 컨테이너로 프록시한다. MariaDB 데이터는 `mariadb-data` 볼륨에 보관된다.
+
+
+
+
+
+
+
+### 
+
+## 실제 도메인
+
+실제 EC2에 배포한 환경은 아래 도메인으로 접근할 수 있다.
+
+- 관리자 화면: https://anna.swot-cat.com/
+- API: https://anna.swot-cat.com/api/foods
+- Swagger: https://anna.swot-cat.com/api/docs
+- 준비 상태: https://anna.swot-cat.com/health/ready
 
 ## 백엔드 개발
 
@@ -608,7 +632,7 @@ EC2 인스턴스에서 아래 순서로 직접 실행했다.
 
 3. GitHub Secrets 등록: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`.
 
-4. `anna` → `main` PR 머지 → CI 통과 후 `deploy.yml`이 자동으로 실행. 1~3번을 이미 EC2에서 세팅해뒀으므로 이 시점에는 조용히 성공하는 것이 정상이다.
+4. `anna` → `main` PR 머지 → CI 통과 후 `deploy.yml`이 자동으로 실행.
 
    `docker-compose.yml` 하나만으로는 로컬 실행을 가정한 `backend/.env.local`과 `NODE_ENV=local`이 항상 적용되므로, 운영에서는 `docker-compose.prod.yml`을 override로 함께 지정해 이 두 값을 운영용으로 바꾼다.
 
@@ -620,7 +644,56 @@ EC2 인스턴스에서 아래 순서로 직접 실행했다.
 
    `docker compose config`로 override 병합 결과를 직접 확인하는 과정에서, Compose가 `env_file` 목록을 완전히 교체하지 않고 두 파일을 이어붙인다는 점을 확인했다. `backend/.env.production`에 없는 키는 base의 `backend/.env.local` 값이 그대로 남는다. 실제로 `.env.production.example`에 `MARIADB_ROOT_PASSWORD`가 빠져 있어 로컬 루트 비밀번호가 새어 들어오는 것을 이 방식으로 발견해 두 예시 파일의 키를 맞췄다. `NODE_ENV`처럼 `environment:`에 직접 적는 값은 키 단위로 병합·override되어 문제가 없었다.
 
-5. (예정) 호스트 nginx 설정: EC2에 `nginx`를 직접 설치하고 도메인을 연결한 뒤 `certbot`으로 TLS 인증서를 발급받아, 퍼블릭 80/443을 `127.0.0.1:8080`(프런트엔드 컨테이너)으로 리버스 프록시한다. 아직 진행 전이며, 완료 후 결과를 여기에 추가한다.
+   최초 실행은 `dial tcp ***:22: i/o timeout`으로 실패했다. 보안 그룹의 22번 포트가 특정 IP 3개로만 제한돼 있어 GitHub Actions 러너의 유동 IP가 막힌 것이었다. GitHub 러너 IP는 계속 바뀌어 특정 IP만 허용하는 방식이 불가능하므로, 22번에 `0.0.0.0/0` 허용 규칙을 추가하고(비밀번호 로그인은 막혀 있고 배포 전용 키로만 인증) 재실행해 해결했다.
+
+   ```text
+   Deploy over SSH: succeeded in 18s
+   ```
+
+   서버에서 실제 반영 결과도 확인했다.
+
+   ```bash
+   git log -1 --oneline
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+   curl -s http://localhost:8080/api/foods
+   ```
+
+   ```text
+   2c4c886 (HEAD -> anna, origin/main, origin/HEAD) feat: 운영 배포용 Compose override와 GitHub Actions CD 파이프라인 추가 (#17)
+   02-food-nutrition-api-api-1        Up (healthy)
+   02-food-nutrition-api-db-1         Up (healthy)
+   02-food-nutrition-api-frontend-1   Up
+   {"success":true,"code":"FOOD_LIST_SUCCESS", ...}
+   ```
+
+   `HEAD`가 `origin/main`과 일치하고 재빌드 후에도 컨테이너가 healthy 상태로 데이터를 정상 조회했다. `main` 병합 → CI 통과 → SSH 자동 접속 → 소스 동기화 → 재빌드까지 CD 파이프라인이 처음부터 끝까지 자동으로 성공하는 것을 확인했다.
+
+5. 호스트 nginx 설정 + HTTPS: EC2에 `nginx`를 직접 설치하고, 기존에 보유한 도메인의 서브도메인 `anna.swot-cat.com`(DNS A 레코드로 `3.37.86.25` 연결)을 퍼블릭 80/443 → `127.0.0.1:8080`(프런트엔드 컨테이너)으로 리버스 프록시하도록 설정했다.
+
+   ```nginx
+   server {
+       listen 80;
+       server_name anna.swot-cat.com;
+
+       location / {
+           proxy_pass http://127.0.0.1:8080;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+
+   `http://anna.swot-cat.com`으로 외부에서 200 응답이 오는 것까지 확인했다. TLS 인증서는 `certbot --nginx`로 발급을 시도했으나 아래 에러로 계속 실패했다.
+
+   ```text
+   During secondary validation: DNS problem: networking error looking up A for ...
+   ```
+
+   `sslip.io`, `nip.io`, DuckDNS, `anna.swot-cat.com`(Vercel DNS)까지 서로 무관한 4개 DNS 인프라에서 전부 동일하게 실패해 원인을 직접 좁혀갔다. 여러 리졸버(Google, Cloudflare, Quad9)에서 DNS는 모두 정상 응답했고, 보안 그룹(80/443)과 호스트 방화벽(`ufw`/`iptables`)도 문제없었으며, `certbot certificates`로 확인한 계정·인증서 상태도 깨끗했다. 마지막으로 Let's Encrypt 공식 상태 페이지(status.io)에서 "High Domain Control Validation Failure Rate"라는 진행 중인 장애(2026-09-11 01:40 UTC 시작, 조사 중)를 확인해, 우리 서버가 아니라 Let's Encrypt 쪽의 일시적 장애임을 확인했다.
+
+   nginx 리버스 프록시와 도메인 연결까지는 완료했고, TLS 발급은 이 장애가 해소되는 대로 재시도할 예정이다.
 
 ### 구성
 
@@ -659,14 +732,95 @@ db 컨테이너 (MariaDB, mariadb-data 볼륨)
 
 ### 현재 한계와 개선 방향
 
-실제 EC2 인스턴스에 수동으로 배포해 컨테이너 기동과 데이터 조회까지 확인했지만(위 [실제 배포 작업 기록](#실제-배포-작업-기록) 참고), 도메인 연결과 HTTPS 설정은 아직 진행하지 않았다.
+실제 EC2 인스턴스에 수동으로 배포해 컨테이너 기동과 데이터 조회까지 확인했다(위 [실제 배포 작업 기록](#실제-배포-작업-기록) 참고). 도메인 연결과 호스트 nginx 리버스 프록시까지는 완료했지만, TLS 인증서 발급은 Let's Encrypt 측 장애로 아직 완료하지 못했다.
 
 현재 Compose 구성은 API와 DB를 같은 호스트에서 실행하는 것을 전제로 한다. 운영 규모가 커지면 README에도 적었듯 DB를 Amazon RDS 같은 별도 관리형 서비스로 분리하는 편이 백업·장애 복구·수평 확장에 유리하다.
 
 외부 의존성이 MariaDB 하나뿐이라 Compose의 기본 `depends_on`/헬스체크만으로 충분했다. 캐시나 메시지 큐처럼 의존성이 늘어나면 시작 순서와 재시도 로직을 더 정교하게 다뤄야 할 수 있다.
 
-CD 워크플로(`deploy.yml`)는 구성과 SSH 키·GitHub Secrets 등록까지 마쳤지만, `main` 병합을 통한 실제 자동배포 트리거는 이 보고서를 쓰는 시점까지 아직 실행하지 않았다. 최초 클론과 `.env.production` 배치는 여전히 수동으로 한 번 해야 하며, 이후 `main` 갱신만 자동화된다. 또한 배포 잡이 서버 소스를 `git reset --hard origin/main`으로 강제 일치시키므로 서버에는 `git`으로 추적되지 않는 변경을 남기면 안 된다. SSH 접속은 GitHub Actions 러너의 아웃바운드 IP가 유동적이라 특정 IP로 제한하기 어려워, 배포 전용 키 분리와 키 기반 인증으로 위험을 줄였다. 규모가 커지면 포트를 열지 않는 AWS SSM Session Manager나 CodeDeploy 방식으로 바꾸는 편이 더 안전하다.
+CD 워크플로(`deploy.yml`)는 실제 `main` 병합으로 트리거해 성공까지 확인했다(위 [실제 배포 작업 기록](#실제-배포-작업-기록) 4번 참고). 최초 클론과 `.env.production` 배치는 여전히 수동으로 한 번 해야 하며, 이후 `main` 갱신만 자동화된다. 또한 배포 잡이 서버 소스를 `git reset --hard origin/main`으로 강제 일치시키므로 서버에는 `git`으로 추적되지 않는 변경을 남기면 안 된다. 
 
-## 6. 소감
+SSH 접속은 GitHub Actions 러너의 아웃바운드 IP가 유동적이라 특정 IP로 제한하기 어려워, 배포 전용 키 분리와 키 기반 인증으로 위험을 줄였다. 규모가 커지면 포트를 열지 않는 AWS SSM Session Manager나 CodeDeploy 방식으로 바꾸는 편이 더 안전하다.
 
-협업에 도움이 되는 깃허브 커밋 단위나 커밋 메시지 작성 방법이 부족했던것같다. 지금은 관리자 인증 미들웨어 만 만들었는데 사용자 인증 미들웨어도 넣고 싶다. 더하자고 들면 더 할수도 있는데 어디까지 해야하는지 모르겠당...
+## 6. 검색 성능을 고려한 인덱스 설계
+
+### 현재 인덱스 구성
+
+| 인덱스 | 컬럼 | 용도 |
+| --- | --- | --- |
+| `PRIMARY` | `id` | 기본 키, 커서 페이지네이션 기준 |
+| `uq_foods_food_cd` | `food_cd` (UNIQUE) | 식품코드 정확 일치, 재적재 시 중복 판정 근거 |
+| `idx_foods_year_id` | `research_year, id` (복합) | 조사연도 필터 + id 정렬 |
+
+`food_name`, `maker_name`에는 별도 인덱스가 없다.
+
+### 검색 조건별 실측
+
+`food_code`(정확 일치)는 UNIQUE 인덱스를 그대로 타서 1건만 조회한다.
+
+```text
+EXPLAIN SELECT * FROM foods WHERE food_cd = 'D000006';
+→ type: const, key: uq_foods_food_cd, rows: 1   (0.4ms)
+```
+
+`food_name`, `maker_name`(부분 일치)은 와일드카드를 리터럴로 처리하려고 `LIKE` 대신 `LOCATE(term, column) > 0`을 쓰는데(설계 근거는 [3. 검색 API](#3-검색-api) 참고), 이 조건은 인덱스로 좁힐 수 없는 함수형 조건이라 PRIMARY를 id 순서대로 훑으며 한 행씩 검사한다.
+
+```text
+EXPLAIN SELECT id, food_name FROM foods WHERE LOCATE('김치', food_name) > 0 ORDER BY id ASC LIMIT 21;
+→ type: index, key: PRIMARY   (8.1ms, 실제 7,683건 중 id=6880까지 스캔 후 21건 확보)
+```
+
+`LIMIT`이 있어도 일치 행이 id 순서상 뒤쪽에 몰려 있으면 조기 종료 이점이 크지 않다는 것을 이 실측으로 확인했다 — 이번 경우 21건을 채우려고 전체의 약 90%를 스캔했다.
+
+`research_year`(정확 일치)는 이론상 `idx_foods_year_id`를 탈 수 있지만, 실제 분포를 보면 `2019`년이 6,759건(전체의 88%)으로 압도적이다.
+
+```text
+research_year 분포: 2019=6759, 2020=863, 2018=60, 2021=1
+```
+
+선택도가 낮다 보니(대부분의 행이 `2019`) 연도만 필터링해도 남는 행이 많아, `research_year + food_name` 조합 조회는 `idx_foods_year_id`로 연도 조건만 좁힌 뒤(`rows: 6759` 추정) 나머지를 `LOCATE`로 거른다(실제 6.3ms).
+
+
+
+### 결론
+
+지금 규모에서는 정확 일치(0.4ms)와 부분 일치(8.1ms) 모두 체감상 문제없는 속도라, 인덱스 없이 `LOCATE`로 처리하는 현재 방식이 합리적이다. 다만 부분 일치는 테이블이 커질수록 스캔 비용이 선형으로 늘고 정확 일치는 로그 스케일로 유지된다는 차이는 남아 있어, 데이터가 크게 늘면 mroonga나 OpenSearch 같은 별도 검색엔진 도입을 다시 검토해야 한다.
+
+## 7. 대규모 트래픽 대비한 API 설계
+
+### 이미 반영한 것
+
+| 항목 | 구현 | 위치 |
+| --- | --- | --- |
+| 요청 제한 | 분당 180회, `/api` 라우트 전용 | `src/middlewares/rateLimiter.js` |
+| 요청 추적 | 요청마다 UUID 발급, `X-Request-ID` 응답 헤더, 처리 시간(ms) 로그 | `src/middlewares/api_logger.js` |
+| DB 커넥션 풀 | Sequelize pool `max: 10, min: 0, acquire: 30000ms, idle: 10000ms` | `src/config/database.js` |
+| 커서 페이지네이션 | id 기준, 기본 20건·최대 100건, `COUNT` 쿼리 없이 `page_size+1`건을 읽어 `has_next` 판정 | `src/services/FoodService.js`, `src/utils/validator.js` |
+| 우아한 종료 | `SIGTERM`/`SIGINT` 수신 시 HTTP 서버를 먼저 닫아 신규 요청을 막고, 진행 중인 요청이 끝난 뒤 DB 풀을 정리하고 종료 | `server.js` |
+| 헬스체크 | `/health/live`, `/health/ready`로 컨테이너가 실제 요청을 받을 준비가 됐는지 확인 | Dockerfile, docker-compose |
+
+`express-rate-limit`은 `app.set('trust proxy', 1)`로 프런트엔드 Nginx(자체 nginx 한 단계) 뒤에서도 실제 클라이언트 IP를 기준으로 카운트하도록 설정했다. 요청 제한을 초과하면 다른 오류와 동일한 형식의 응답(`RATE_LIMIT_EXCEEDED`)을 반환한다.
+
+커넥션 풀을 10개로 제한한 이유는 단일 MariaDB 컨테이너가 감당할 수 있는 동시 연결 수를 넘기지 않기 위해서다. API 컨테이너를 여러 개로 늘리면(수평 확장) 컨테이너 수 × 10만큼 DB 연결이 늘어나므로, 그 경우 풀 크기를 줄이거나 DB 쪽 `max_connections`을 같이 조정해야 한다.
+
+### 현재 한계와 개선 방향
+
+응답 압축(gzip/br)을 적용하지 않았다. 지금은 응답 크기가 작아 체감 차이가 없지만, 목록 조회처럼 페이로드가 커지는 요청이 늘면 `compression` 미들웨어 추가를 검토할 수 있다.
+
+캐싱 계층이 없다. 동일한 검색 조건이 반복돼도 매번 DB를 조회하므로, 트래픽이 늘면 자주 조회되는 검색 결과를 Redis 등에 짧게 캐시하는 방안을 검토할 수 있다.
+
+수평 확장 구조가 아니다. 지금은 EC2 한 대에 API 컨테이너 하나, DB 컨테이너 하나뿐이라 Node 클러스터링(pm2 등)이나 컨테이너 복제, 로드밸런서가 없다. 실제 대규모 트래픽을 감당하려면 API를 stateless하게 유지한 채(이미 세션 없이 요청마다 독립적으로 처리하므로 전제는 충족) 컨테이너를 여러 대로 늘리고 앞단에 로드밸런서를 두는 구조가 필요하다.
+
+DB가 단일 인스턴스다. [5. 배포](#5-배포)에도 적었듯, 트래픽이 커지면 API와 DB를 분리하고 Amazon RDS 같은 관리형 서비스로 옮기는 편이 백업·장애 복구·읽기 복제본(read replica) 구성에 유리하다.
+
+## 8. 소감
+
+이번 과제를 하면서 가장 아쉬웠던점이 협업에 도움이 되는 깃허브 커밋 단위나 커밋 메시지 작성 방법이였습니다. 아직 부족한 것 같아 좀더 공부해야겠다는 생각을 했습니다. 
+
+구현하면서 지금은 관리자 인증 미들웨어만 만들었는데 사용자 인증 미들웨어도 넣고 싶고, 관리자 화면도 만들었으니 인증도 신경쓰고 싶은 생각이 들었습니다.
+api 부분도 좀더 보안에 신경써서 만들면 좋겠다고 생각했습니다.
+
+
+6번(인덱스 설계)과 7번(대규모 트래픽 대비 API 설계)은 특히 어려웠다. rate limit, 커넥션 풀, 커서 페이지네이션처럼 이미 갖춘 것들이 실제 트래픽 앞에서 충분한지, 다음엔 뭘 더 손대야 하는지 스스로도 확신이 서지 않았다. 인덱스 설계 같은 경우는 평소엔 DB 인덱스라고 하면 그냥 컬럼에 인덱스 하나 거는 것 정도로만 알고 있었는데, 이번 과제를 통해 대용량 데이터에서는 그 안에서도 방법이 다양하게 갈린다는 걸 알게 된것 같습니다. 대규모 트래픽 대비 api 설계같은 경우는 지금 규모에서는 검증할 방법이 마땅치 않다 보니 더더욱 공부가 필요하다고 느꼇습니다.
+
+
