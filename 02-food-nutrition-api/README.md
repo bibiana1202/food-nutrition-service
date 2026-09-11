@@ -56,14 +56,6 @@ docker compose up -d
 
 프런트엔드 Nginx가 `/api`와 `/health` 요청을 API 컨테이너로 프록시한다. MariaDB 데이터는 `mariadb-data` 볼륨에 보관된다.
 
-
-
-
-
-
-
-### 
-
 ## 실제 도메인
 
 실제 EC2에 배포한 환경은 아래 도메인으로 접근할 수 있다.
@@ -89,7 +81,7 @@ npm run dev
 
 Docker Compose도 로컬 개발 설정인 `backend/.env.local`을 읽는다. `DATABASE_HOST`와 `DATABASE_PORT`는 Express 연결 위치이고 `MARIADB_*`는 Express와 MariaDB 컨테이너가 함께 사용하는 DB 설정이다. 실제 환경 파일은 Git에 포함하지 않고 `.env.local.example`만 공유한다.
 
-`LOG_LEVEL`은 로컬에서 기본 `debug`, 운영에서 기본 `info`를 사용한다. 로컬 로그는 읽기 쉬운 한 줄 형식이며 운영 로그는 JSON으로 표준 출력에 기록된다. Docker에서는 `docker compose logs -f api`로 확인하고, 배포 환경에서는 CloudWatch 같은 로그 수집 도구가 표준 출력을 보관한다.
+`LOG_LEVEL`은 로컬에서 기본 `debug`, 운영에서 기본 `info`를 사용한다. 로컬 로그는 읽기 쉬운 한 줄 형식이며 운영 로그는 JSON으로 표준 출력에 기록된다. 로컬·EC2 운영 모두 `docker compose logs -f api`로 같은 방식으로 확인한다. 지금은 별도 로그 수집기가 없어 컨테이너를 재시작하면 그 이전 로그는 사라지는데, 트래픽이 늘면 CloudWatch Logs나 Loki 같은 도구로 표준 출력을 영구 보관하는 방안을 검토할 수 있다.
 
 ```http
 Authorization: Bearer <ADMIN_API_KEY>
@@ -147,13 +139,9 @@ npm run dev
 npm run build
 ```
 
-개발 서버는 `/api` 요청을 `http://127.0.0.1:3000`으로 프록시한다. 독립 도메인에 배포할 때는 빌드 시 `VITE_API_BASE_URL`을 API 주소로 설정할 수 있다. 빌드 결과는 `frontend/dist`에 생성된다.
+개발 서버는 `/api` 요청을 `http://127.0.0.1:3000`으로 프록시한다. 빌드 결과는 `frontend/dist`에 생성된다.
 
-운영 백엔드는 `.env.production` 파일을 자동으로 읽지 않는다. 배포 환경이 `.env.production.example`에 정의된 값을 환경변수로 주입한 뒤 `npm run db:migrate`와 `npm start`를 실행한다. 비밀번호와 관리자 키는 AWS Secrets Manager 같은 비밀 저장소에서 공급한다. 프런트엔드의 `VITE_*` 값은 브라우저 번들에 공개되므로 비밀값을 넣지 않는다.
-
-```bash
-VITE_API_BASE_URL=https://api.example.com npm run build
-```
+운영 백엔드는 `docker-compose.prod.yml`이 `backend/.env.production`을 `env_file`로 직접 읽는다(`npm start`를 따로 실행하지 않고 컨테이너가 `node server.js`로 기동한다). 이 파일은 `.env.production.example`을 기준으로 서버에 직접 만들고 git에는 올리지 않는다. 자세한 내용은 [5. 배포의 실제 배포 작업 기록](#5-배포)에 정리했다. 프런트엔드의 `VITE_*` 값은 브라우저 번들에 공개되므로 비밀값을 넣지 않으며, 프런트엔드와 API가 같은 도메인을 쓰는 지금 구조에서는 `VITE_API_BASE_URL`을 비워둔다(상대경로 `/api`로 호출).
 
 # 구현 보고서
 
@@ -504,7 +492,8 @@ ok 9 - 관리자 키가 없으면 읽기 전용
 
 ### 현재 한계와 개선 방향
 
-`food_name`, `maker_name` 부분 검색은 `LOCATE`를 사용하므로 인덱스를 타지 않고 대상 컬럼을 스캔한다. 현재 7,683건에서는 문제가 없지만 데이터가 크게 늘어나 검색 지연이 실제로 발생하면 FULLTEXT 인덱스나 별도 검색엔진(OpenSearch 등) 도입을 검토할 수 있다. 관련 조사 내용은 `docs/db-index-notes.md`에 정리했다(MariaDB 기본 FULLTEXT는 한글 복합어에서 정확도가 깨지는 것을 실측했고, mroonga 스토리지 엔진 도입은 테이블 엔진 교체가 필요해 현재 규모에는 과하다고 판단했다).
+`food_name`, `maker_name` 부분 검색은 `LOCATE`를 사용하므로 인덱스를 타지 않고 대상 컬럼을 스캔한다. 현재 7,683건에서는 문제가 없지만 데이터가 크게 늘어나 검색 지연이 실제로 발생하면 FULLTEXT 인덱스나 별도 검색엔진(OpenSearch 등) 도입을 검토할 수 있다. 
+
 
 커서는 `id` 오름차순 한 가지 정렬만 지원한다. 특정 페이지로 바로 이동하거나 다른 기준(예: 열량순)으로 정렬하는 기능은 지금 범위에 포함하지 않았으며, 필요해지면 정렬 기준별로 별도의 복합 커서를 설계해야 한다.
 
@@ -670,7 +659,10 @@ EC2 인스턴스에서 아래 순서로 직접 실행했다.
 
 5. 호스트 nginx 설정 + HTTPS: EC2에 `nginx`를 직접 설치하고, 기존에 보유한 도메인의 서브도메인 `anna.swot-cat.com`(DNS A 레코드로 `3.37.86.25` 연결)을 퍼블릭 80/443 → `127.0.0.1:8080`(프런트엔드 컨테이너)으로 리버스 프록시하도록 설정했다.
 
-   ```nginx
+   ```bash
+   sudo apt-get install -y nginx
+
+   sudo tee /etc/nginx/sites-available/food-nutrition > /dev/null <<'EOF'
    server {
        listen 80;
        server_name anna.swot-cat.com;
@@ -683,17 +675,38 @@ EC2 인스턴스에서 아래 순서로 직접 실행했다.
            proxy_set_header X-Forwarded-Proto $scheme;
        }
    }
+   EOF
+
+   sudo ln -sf /etc/nginx/sites-available/food-nutrition /etc/nginx/sites-enabled/
+   sudo rm -f /etc/nginx/sites-enabled/default
+   sudo nginx -t
+   sudo systemctl restart nginx
    ```
 
-   `http://anna.swot-cat.com`으로 외부에서 200 응답이 오는 것까지 확인했다. TLS 인증서는 `certbot --nginx`로 발급을 시도했으나 아래 에러로 계속 실패했다.
+   `http://anna.swot-cat.com`으로 외부에서 200 응답이 오는 것까지 확인했다. 이어서 TLS 인증서를 발급했다.
+
+   ```bash
+   sudo apt-get install -y certbot python3-certbot-nginx
+   sudo certbot --nginx -d anna.swot-cat.com
+   ```
+
+   
+    정상적으로 인증서가 발급됐다.
 
    ```text
-   During secondary validation: DNS problem: networking error looking up A for ...
+   Successfully received certificate.
+   Certificate is saved at: /etc/letsencrypt/live/anna.swot-cat.com/fullchain.pem
+   Congratulations! You have successfully enabled HTTPS on https://anna.swot-cat.com
    ```
 
-   `sslip.io`, `nip.io`, DuckDNS, `anna.swot-cat.com`(Vercel DNS)까지 서로 무관한 4개 DNS 인프라에서 전부 동일하게 실패해 원인을 직접 좁혀갔다. 여러 리졸버(Google, Cloudflare, Quad9)에서 DNS는 모두 정상 응답했고, 보안 그룹(80/443)과 호스트 방화벽(`ufw`/`iptables`)도 문제없었으며, `certbot certificates`로 확인한 계정·인증서 상태도 깨끗했다. 마지막으로 Let's Encrypt 공식 상태 페이지(status.io)에서 "High Domain Control Validation Failure Rate"라는 진행 중인 장애(2026-09-11 01:40 UTC 시작, 조사 중)를 확인해, 우리 서버가 아니라 Let's Encrypt 쪽의 일시적 장애임을 확인했다.
+   HTTPS로 전환된 뒤 실제 엔드포인트 4개를 모두 외부에서 재확인했다.
 
-   nginx 리버스 프록시와 도메인 연결까지는 완료했고, TLS 발급은 이 장애가 해소되는 대로 재시도할 예정이다.
+   ```text
+   https://anna.swot-cat.com/             → 200
+   https://anna.swot-cat.com/api/foods    → 200
+   https://anna.swot-cat.com/api/docs     → 200 (swagger-ui-express가 /api/docs/로 301 리다이렉트 후)
+   https://anna.swot-cat.com/health/ready → 200
+   ```
 
 ### 구성
 
@@ -732,7 +745,7 @@ db 컨테이너 (MariaDB, mariadb-data 볼륨)
 
 ### 현재 한계와 개선 방향
 
-실제 EC2 인스턴스에 수동으로 배포해 컨테이너 기동과 데이터 조회까지 확인했다(위 [실제 배포 작업 기록](#실제-배포-작업-기록) 참고). 도메인 연결과 호스트 nginx 리버스 프록시까지는 완료했지만, TLS 인증서 발급은 Let's Encrypt 측 장애로 아직 완료하지 못했다.
+실제 EC2 인스턴스에 수동으로 배포해 컨테이너 기동, 데이터 조회, 도메인 연결과 HTTPS까지 모두 확인했다(위 [실제 배포 작업 기록](#실제-배포-작업-기록) 참고).
 
 현재 Compose 구성은 API와 DB를 같은 호스트에서 실행하는 것을 전제로 한다. 운영 규모가 커지면 README에도 적었듯 DB를 Amazon RDS 같은 별도 관리형 서비스로 분리하는 편이 백업·장애 복구·수평 확장에 유리하다.
 
