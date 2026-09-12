@@ -39,7 +39,10 @@ docker-compose.yml      # 로컬 통합 실행
 
 ## Docker로 전체 실행
 
+아래 명령은 이 README가 있는 `02-food-nutrition-api` 디렉터리에서 실행한다. 먼저 로컬 Docker 실행에 필요한 환경 파일을 만든다. 예제 파일의 `ADMIN_API_KEY`는 읽기 전용 조회에는 사용되지 않지만, 관리자 API를 테스트하려면 본인이 생성한 값으로 바꾼다.
+
 ```bash
+cp backend/.env.local.example backend/.env.local
 docker compose build
 docker compose run --rm seed
 docker compose up -d
