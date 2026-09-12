@@ -77,44 +77,11 @@ npm run dev
 
 Docker Compose도 로컬 개발 설정인 `backend/.env.local`을 읽는다. `DATABASE_HOST`와 `DATABASE_PORT`는 Express 연결 위치이고 `MARIADB_*`는 Express와 MariaDB 컨테이너가 함께 사용하는 DB 설정이다. 실제 환경 파일은 Git에 포함하지 않고 `.env.local.example`만 공유한다.
 
-`LOG_LEVEL`은 로컬에서 기본 `debug`, 운영에서 기본 `info`를 사용한다. 로컬 로그는 읽기 쉬운 한 줄 형식이며 운영 로그는 JSON으로 표준 출력에 기록된다. 로컬·EC2 운영 모두 `docker compose logs -f api`로 같은 방식으로 확인한다. 지금은 별도 로그 수집기가 없어 컨테이너를 재시작하면 그 이전 로그는 사라지는데, 트래픽이 늘면 CloudWatch Logs나 Loki 같은 도구로 표준 출력을 영구 보관하는 방안을 검토할 수 있다.
-
-```http
-Authorization: Bearer <ADMIN_API_KEY>
-```
-
-API는 `food_name`(식품명), `research_year`(조사연도), `maker_name`(지역/제조사), `food_code`(식품코드) 검색 조건을 지원하며 동시에 조합할 수 있다.
-
-```bash
-curl -G --data-urlencode 'food_name=김치' http://localhost:3000/api/foods
-```
-
-조건마다 부분 일치와 정확 일치를 다르게 적용했고 대소문자·공백도 처리한다. 설계 근거와 검증 결과는 [구현 보고서](#3-검색-api)에 정리했다.
-
-목록은 ID 기반 커서 페이지네이션을 사용한다. 첫 요청에서는 `cursor`를 생략하고, 다음 요청에는 이전 응답의 `next_cursor`를 전달한다. `has_next`가 `false`이면 마지막 목록이다.
-
-```bash
-curl 'http://localhost:3000/api/foods?page_size=20&cursor=20'
-```
-
-| 메서드 | 경로                | 기능           |
-| ------ | ------------------- | -------------- |
-| GET    | `/api/foods`        | 검색과 목록    |
-| GET    | `/api/foods/:id`    | 단건 조회      |
-| POST   | `/api/foods`        | 생성           |
-| PATCH  | `/api/foods/:id`    | 부분 수정      |
-| DELETE | `/api/foods/:id`    | 삭제           |
-| POST   | `/api/admin/verify` | 관리자 키 확인 |
-
-응답의 HTTP 상태와 세부 문자열 코드는 [Result Code 문서](backend/docs/result-codes.md)에서 확인할 수 있다.
-
-식품코드는 UNIQUE 인덱스, 연도와 ID는 복합 인덱스를 사용한다. Sequelize 모델과 Umzug 마이그레이션을 분리했으며 `sequelize.sync({ alter: true })`는 사용하지 않는다. 엑셀 적재는 InnoDB 트랜잭션에서 실행되며 오류가 발생하면 전체를 롤백한다. 재적재 시 기존 코드를 건너뛴다. 원본 분석과 변환 규칙은 [구현 보고서](#1-데이터-적재)에 정리했다.
-
 ### 테스트
 
 ```bash
-cd backend
 docker compose up -d db
+cd backend
 set -a && source .env.local && set +a
 npm run test:docker
 ```
@@ -137,7 +104,7 @@ npm run build
 
 개발 서버는 `/api` 요청을 `http://127.0.0.1:3000`으로 프록시한다. 빌드 결과는 `frontend/dist`에 생성된다.
 
-운영 백엔드는 `docker-compose.prod.yml`이 `backend/.env.production`을 `env_file`로 직접 읽는다(`npm start`를 따로 실행하지 않고 컨테이너가 `node server.js`로 기동한다). 이 파일은 `.env.production.example`을 기준으로 서버에 직접 만들고 git에는 올리지 않는다. 자세한 내용은 [5. 배포의 실제 배포 작업 기록](#5-배포)에 정리했다. 프런트엔드의 `VITE_*` 값은 브라우저 번들에 공개되므로 비밀값을 넣지 않으며, 프런트엔드와 API가 같은 도메인을 쓰는 지금 구조에서는 `VITE_API_BASE_URL`을 비워둔다(상대경로 `/api`로 호출).
+운영 백엔드는 `docker-compose.prod.yml`이 `backend/.env.production`을 `env_file`로 직접 읽는다(`npm start`를 따로 실행하지 않고 컨테이너가 `node server.js`로 기동한다). 이 파일은 `.env.production.example`을 기준으로 서버에 직접 만들고 git에는 올리지 않는다. 자세한 내용은 [5. 배포](#5-배포)의 실제 배포 작업 기록에 정리했다. 프런트엔드의 `VITE_*` 값은 브라우저 번들에 공개되므로 비밀값을 넣지 않으며, 프런트엔드와 API가 같은 도메인을 쓰는 지금 구조에서는 `VITE_API_BASE_URL`을 비워둔다(상대경로 `/api`로 호출).
 
 # 구현 보고서
 
@@ -216,9 +183,13 @@ GET /api/foods?food_code=D000006
 
 대표 데이터 검색 시 `꿩불고기`와 원본 영양성분이 반환되는 것을 확인했다. 따라서 원본 파일 읽기, 데이터 정제와 검증, MariaDB 적재, API 조회까지 요구사항의 전체 흐름을 구현했다.
 
+### 적재 구조와 트랜잭션
+
+식품코드에는 UNIQUE 제약을 두고, `research_year`와 `id`에는 복합 인덱스를 사용한다. Sequelize 모델과 Umzug 마이그레이션을 분리했으며 `sequelize.sync({ alter: true })`는 사용하지 않는다. 엑셀 적재 전체는 InnoDB 트랜잭션에서 실행되므로 오류가 발생하면 모든 워크시트의 적재 작업을 롤백한다.
+
 ### 재실행 시 중복 방지
 
-`ImportService.importFoods`는 `food_cd` UNIQUE 인덱스를 근거로 `Food.bulkCreate(batch, { ignoreDuplicates: true, ... })`를 사용한다. 이미 저장된 식품코드는 조용히 건너뛰고 새 코드만 INSERT하므로, 같은 파일을 여러 번 적재해도 행이 중복되지 않고 그 사이 관리자가 수정한 값도 덮어쓰지 않는다. 워크시트 하나 전체를 하나의 트랜잭션으로 묶어 처리하므로 중간 행에서 오류가 나면 해당 시트의 적재분 전체가 롤백된다.
+`ImportService.importFoods`는 `food_cd` UNIQUE 제약을 근거로 `Food.bulkCreate(batch, { ignoreDuplicates: true, ... })`를 사용한다. 이미 저장된 식품코드는 조용히 건너뛰고 새 코드만 INSERT하므로, 같은 파일을 여러 번 적재해도 행이 중복되지 않고 그 사이 관리자가 수정한 값도 덮어쓰지 않는다.
 
 이미 7,683건이 적재된 상태에서 `docker compose run --rm seed`를 다시 실행한 실제 결과다.
 
@@ -266,10 +237,10 @@ GET /api/foods?food_code=D000006
 
 - **결측값**: 빈 문자열, `-`, `N/A`, `NA`, `NULL`은 모두 결측으로 보고 `null`로 저장한다. 0과 결측을 구분해야 하므로 빈 값을 0으로 바꾸지 않는다.
 - **한정 표현("1g 미만" 등)**: 영양성분 셀이 `숫자 + (g|mg)? + 미만` 형태이면 그 필드는 확정 수치로 만들지 않고 `null`로 저장한다. 대신 원문을 `필드명: 원문` 형태로 모아 `source_notes`에 남겨 상세 조회에서 원래 표현을 확인할 수 있게 한다. 원본에는 총당류 12건, 단백질 3건, 탄수화물 1건이 이 패턴이다.
-- **숫자 변환**: 정수·소수와 `1,234.5` 같은 천 단위 구분 표기만 정규식으로 허용한 뒤 숫자로 바꾼다. `1,2`, `12mg`, 음수, `NaN`, `Infinity`처럼 형식이 애매하거나 잘못된 값은 오류로 처리해 시트 번호와 행 번호를 포함한 메시지와 함께 적재를 중단한다. 250행 단위로 묶은 배치가 트랜잭션 하나이므로, 한 행이라도 잘못되면 그 배치 전체가 롤백된다.
+- **숫자 변환**: 정수·소수와 `1,234.5` 같은 천 단위 구분 표기만 정규식으로 허용한 뒤 숫자로 바꾼다. `1,2`, `12mg`, 음수, `NaN`, `Infinity`처럼 형식이 애매하거나 잘못된 값은 오류로 처리해 시트 번호와 행 번호를 포함한 메시지와 함께 적재를 중단한다. 각 워크시트의 행을 배치로 모아 적재하고 전체 워크북 적재를 하나의 트랜잭션으로 묶으므로, 한 행이라도 잘못되면 모든 워크시트의 적재가 롤백된다.
 - **서식·수식 셀**: ExcelJS가 richText나 수식으로 반환하는 셀도 계산 결과와 텍스트를 재귀적으로 풀어 같은 방식으로 검사한다.
 
-`tests/importer.test.js`가 이 처리를 검증한다. `엑셀 매핑, 0, 단위, 미만 표현, 중복 방지` 테스트는 `1,234.5`가 `1234.5`로, 문자열 `0`이 숫자 `0`으로 바뀌고 `1g 미만`은 `null`과 `source_notes: "protein: 1g 미만"`으로 저장되는지 확인한다. `모호하거나 잘못된 숫자를 거부` 테스트는 `1,2`, `1mg`, `-1`, `NaN`, `Infinity`, `1e999`를 모두 거부하는지 확인하고, `잘못된 행은 전체 트랜잭션 롤백` 테스트는 251행 중 마지막 행에만 잘못된 숫자를 넣어 배치 전체가 저장되지 않는지 확인한다.
+`tests/importer.test.js`가 이 처리를 검증한다. `엑셀 매핑, 0, 단위, 미만 표현, 중복 방지` 테스트는 `1,234.5`가 `1234.5`로, 문자열 `0`이 숫자 `0`으로 바뀌고 `1g 미만`은 `null`과 `source_notes: "protein: 1g 미만"`으로 저장되는지 확인한다. `모호하거나 잘못된 숫자를 거부` 테스트는 `1,2`, `1mg`, `-1`, `NaN`, `Infinity`, `1e999`를 모두 거부하는지 확인하고, `잘못된 행은 전체 트랜잭션 롤백` 테스트는 251행 중 마지막 행에만 잘못된 숫자를 넣어 전체 워크북 적재가 저장되지 않는지 확인한다.
 
 ### 현재 한계와 개선 방향
 
@@ -290,12 +261,19 @@ GET /api/foods?food_code=D000006
 | POST | `/api/foods` | 관리자 | 등록 |
 | PATCH | `/api/foods/:id` | 관리자 | 전달된 필드만 부분 수정 |
 | DELETE | `/api/foods/:id` | 관리자 | 삭제 |
+| POST | `/api/admin/verify` | 관리자 | 관리자 키 확인 |
+
+쓰기 요청에는 다음 관리자 인증 헤더가 필요하다. 응답의 HTTP 상태와 세부 문자열 코드는 [Result Code 문서](backend/docs/result-codes.md)에서 확인할 수 있다.
+
+```http
+Authorization: Bearer <ADMIN_API_KEY>
+```
 
 `GET /api/foods`는 검색 조건 없이도 호출할 수 있는 기본 목록 조회 엔드포인트다. 검색 조건 조합, 커서 페이지네이션 동작은 [3. 검색 API](#3-검색-api)에서 자세히 다룬다.
 
 - **입력 검증**: `src/utils/validator.js`의 Zod 스키마가 `food_cd`(trim, 대문자 변환, 형식 정규식), `food_name`(1~300자), 영양성분 10개 필드(0 이상 nullable 숫자)를 등록 전에 검사한다. `.strict()`로 정의에 없는 필드는 거부하고, PATCH는 등록 스키마를 `.partial()`로 완화하되 `refine`으로 빈 객체는 막는다.
 - **관리자 인증**: `requireAdmin` 미들웨어가 `Authorization: Bearer <ADMIN_API_KEY>` 값을 SHA-256 해시로 만든 뒤 `timingSafeEqual`로 비교한다. 관리자 키가 설정되지 않은 배포에서는 쓰기 요청 자체를 503(`ADMIN_KEY_NOT_CONFIGURED`)으로 막아 읽기 전용 운영을 지원한다.
-- **중복 방지**: `food_cd`에 UNIQUE 인덱스를 두고, 애플리케이션 검증을 통과해도 DB가 거부하면 `errorHandler`가 `UniqueConstraintError`를 409(`DUPLICATE_FOOD_CODE`)로 변환한다. 동시에 같은 코드로 등록을 시도해도 DB 제약이 최종 방어선이 되므로 경쟁 조건에서도 하나만 성공한다.
+- **중복 방지**: `food_cd`에 UNIQUE 제약을 두고, 애플리케이션 검증을 통과해도 DB가 거부하면 `errorHandler`가 `UniqueConstraintError`를 409(`DUPLICATE_FOOD_CODE`)로 변환한다. 동시에 같은 코드로 등록을 시도해도 DB 제약이 최종 방어선이 되므로 경쟁 조건에서도 하나만 성공한다.
 - **존재하지 않는 리소스**: `FoodService.get/update/remove`는 대상이 없으면 `ApiError(FOOD_NOT_FOUND)`를 던지고 컨트롤러는 이를 그대로 상위로 전달해 공통 오류 응답으로 처리한다.
 - **응답 형식**: 모든 성공 응답은 `{ success, code, message, data, request_id }` 형식이며 등록 성공 시 `Location` 헤더에 생성된 리소스 경로를 함께 반환한다. 삭제는 본문 없는 204를 반환한다.
 - **오류 처리 일관성**: 성공·실패 응답 모두 `{ success, code, message, data|details, request_id }` 형식을 따른다. `src/constants/resultCodes.js`가 HTTP 상태, 문자열 코드, 메시지를 한 곳에서 관리하고(`docs/result-codes.md`에 문서화), `errorHandler` 미들웨어가 다음 예외를 모두 해당 코드로 변환한다.
@@ -433,6 +411,12 @@ ok 7 - 동시 중복 생성은 하나만 성공
   | `research_year` | 정확 일치 | 연도는 범위가 아니라 특정 값이라 부분 일치가 의미 없다 |
   | `food_code` | 정확 일치 | 고유 식별자이므로 부분 일치하면 관련 없는 결과가 섞인다 |
 
+  예를 들어 식품명으로 검색할 수 있다.
+
+  ```bash
+  curl -G --data-urlencode 'food_name=김치' http://localhost:3000/api/foods
+  ```
+
   부분 일치는 `LOCATE(검색어, 컬럼)`으로 구현했다([FoodService.js:21-24](02-food-nutrition-api/backend/src/services/FoodService.js#L21-L24)). `LIKE` 대신 `LOCATE`를 쓴 이유는 사용자가 입력한 `%`, `_`를 SQL 와일드카드가 아니라 검색어 그대로의 문자로 처리하기 위해서다 — `LIKE`였다면 `%` 한 글자만 입력해도 전체 테이블이 매치되는 예상 밖의 동작이 생긴다.
 
   대소문자와 공백도 필드마다 다르게 다룬다.
@@ -468,10 +452,16 @@ GET /api/foods?page_size=101
 
 `next_cursor`를 다음 요청의 `cursor`로 그대로 전달하면 이어지는 페이지를 받고, `has_next`가 `false`이면 마지막 페이지임을 뜻한다.
 
+```bash
+curl 'http://localhost:3000/api/foods?page_size=20&cursor=20'
+```
+
 ### 검증
 
 ```bash
-npm test
+cd backend
+set -a && source .env.local && set +a
+npm run test:docker
 ```
 
 ```text
@@ -751,7 +741,11 @@ CD 워크플로(`deploy.yml`)는 실제 `main` 병합으로 트리거해 성공�
 
 SSH 접속은 GitHub Actions 러너의 아웃바운드 IP가 유동적이라 특정 IP로 제한하기 어려워, 배포 전용 키 분리와 키 기반 인증으로 위험을 줄였다. 규모가 커지면 포트를 열지 않는 AWS SSM Session Manager나 CodeDeploy 방식으로 바꾸는 편이 더 안전하다.
 
-## 6. 검색 성능을 고려한 인덱스 설계
+## 6. 운영 로그
+
+`LOG_LEVEL`은 로컬에서 기본 `debug`, 운영에서 기본 `info`를 사용한다. 로컬 로그는 읽기 쉬운 한 줄 형식이며 운영 로그는 JSON으로 표준 출력에 기록된다. 로컬·EC2 운영 모두 `docker compose logs -f api`로 같은 방식으로 확인한다. 지금은 별도 로그 수집기가 없어 컨테이너를 재시작하면 그 이전 로그는 사라지는데, 트래픽이 늘면 CloudWatch Logs나 Loki 같은 도구로 표준 출력을 영구 보관하는 방안을 검토할 수 있다.
+
+## 7. 검색 성능을 고려한 인덱스 설계
 
 ### 현재 인덱스 구성
 
@@ -799,7 +793,7 @@ research_year 분포: 2019=6759, 2020=863, 2018=60, 2021=1
 
 정리하면: (1) B-Tree 구조상 `LOCATE`는 애초에 인덱스를 탈 수 없는 조건이고, (2) FULLTEXT가 이론적인 해결책이지만 한글에서는 정확도 문제로 채택하지 않았으며, (3) 지금 규모에서는 정확도를 지키는 현재 방식을 유지하는 것이 합리적이다. 데이터가 크게 늘어 실제로 속도가 문제가 되면, 앞부분 일치로 검색 범위를 제한하거나 Elasticsearch/OpenSearch, PostgreSQL + `pg_trgm` 같은 대안을 검토해야 한다.
 
-## 7. 대규모 트래픽 대비한 API 설계
+## 8. 대규모 트래픽 대비한 API 설계
 
 ### 이미 반영한 것
 
@@ -830,14 +824,13 @@ research_year 분포: 2019=6759, 2020=863, 2018=60, 2021=1
 
 DB가 단일 인스턴스다. [5. 배포](#5-배포)에도 적었듯, 트래픽이 커지면 API와 DB를 분리하고 Amazon RDS 같은 관리형 서비스로 옮기는 편이 백업·장애 복구·읽기 복제본(read replica) 구성에 유리하다.
 
-## 8. 소감
+## 9. 소감
 
 이번 과제를 하면서 가장 아쉬웠던점이 협업에 도움이 되는 깃허브 커밋 단위나 커밋 메시지 작성 방법이였습니다. 아직 부족한 것 같아 좀더 공부해야겠다는 생각을 했습니다. 
 
 구현하면서 지금은 관리자 인증 미들웨어만 만들었는데 사용자 인증 미들웨어도 넣고 싶고, 관리자 화면도 만들었으니 인증도 신경쓰고 싶은 생각이 들었습니다.
 api 부분도 좀더 보안에 신경써서 만들면 좋겠다고 생각했습니다.
 
+7번(인덱스 설계)과 8번(대규모 트래픽 대비 API 설계)은 특히 어려웠습니다. rate limit, 커넥션 풀, 커서 페이지네이션처럼 이미 갖춘 것들이 실제 트래픽 앞에서 충분한지, 다음엔 뭘 더 손대야 하는지 스스로도 확신이 서지 않았습니다. 인덱스 설계 같은 경우는 평소엔 DB 인덱스라고 하면 그냥 컬럼에 인덱스 하나 거는 것 정도로만 알고 있었는데, 이번 과제를 통해 대용량 데이터에서는 그 안에서도 방법이 다양하게 있다는것을 알게 되었습니다.
 
-6번(인덱스 설계)과 7번(대규모 트래픽 대비 API 설계)은 특히 어려웠다. rate limit, 커넥션 풀, 커서 페이지네이션처럼 이미 갖춘 것들이 실제 트래픽 앞에서 충분한지, 다음엔 뭘 더 손대야 하는지 스스로도 확신이 서지 않았다. 인덱스 설계 같은 경우는 평소엔 DB 인덱스라고 하면 그냥 컬럼에 인덱스 하나 거는 것 정도로만 알고 있었는데, 이번 과제를 통해 대용량 데이터에서는 그 안에서도 방법이 다양하게 갈린다는 걸 알게 된것 같습니다. 대규모 트래픽 대비 api 설계같은 경우는 지금 규모에서는 검증할 방법이 마땅치 않다 보니 더더욱 공부가 필요하다고 느꼇습니다.
-
-
+이번 과제를 통해서 평가라는 큰 목적을 가지고 수행했지만, 지난 개발 경험과 가지고 있던 지식들을 돌이켜보고 되새길수 있었던 좋은 경험이였습니다. 과제에서 원하는 바가 어떤것을 알고 싶어하는것인지 파악하면서 이점이 실제로 개발자로서 중요한 부분이다 생각하면서 더 좋은 개발자가 되기위해 성장하게된 경험이라고 생각하였습니다.
