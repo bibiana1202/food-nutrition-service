@@ -27,8 +27,12 @@ const foodCreateSchema = z
       .min(1)
       .max(64)
       // 원본 데이터의 코드(D000006 등)와 관리자가 새로 등록하는 코드를 함께 허용하되
-      // 특수문자로 시작하는 값은 막는다.
-      .regex(/^[A-Z0-9][A-Z0-9_-]*$/),
+      // 특수문자로 시작하는 값은 막는다. 두 번째 인자로 메시지를 직접 지정해, Zod 기본
+      // 메시지(정규식 원문을 그대로 노출함)가 사용자에게 그대로 보이지 않게 한다.
+      .regex(
+        /^[A-Z0-9][A-Z0-9_-]*$/,
+        '영문 대문자·숫자로 시작해야 하며, 이후에는 영문 대문자·숫자·-·_ 만 사용할 수 있습니다.',
+      ),
     food_name: z.string().trim().min(1).max(300),
     group_name: optionalText(300),
     research_year: z.number().int().min(1900).max(2100).nullable().optional(),
@@ -52,7 +56,7 @@ const foodPatchSchema = foodCreateSchema
 const positiveIntegerString = (max) =>
   z
     .string()
-    .regex(/^[1-9]\d*$/)
+    .regex(/^[1-9]\d*$/, '1 이상의 정수만 입력할 수 있습니다.')
     .transform(Number)
     .pipe(z.number().int().max(max));
 const searchSchema = z
