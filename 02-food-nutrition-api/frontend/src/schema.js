@@ -22,7 +22,11 @@ export const foodCreateSchema = z
       .toUpperCase()
       .min(1)
       .max(64)
-      .regex(/^[A-Z0-9][A-Z0-9_-]*$/),
+      // 백엔드(backend/src/utils/validator.js)의 food_cd 검증과 반드시 동일하게 맞춘다.
+      .regex(
+        /^[A-Z0-9][A-Z0-9_-]*$/,
+        '영문 대문자·숫자로 시작해야 하며, 이후에는 영문 대문자·숫자·-·_ 만 사용할 수 있습니다.',
+      ),
     food_name: z.string().trim().min(1).max(300),
     group_name: optionalText(300),
     research_year: z.number().int().min(1900).max(2100).nullable().optional(),
