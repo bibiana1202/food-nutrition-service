@@ -25,39 +25,6 @@ backend/
   tests/
   package.json
   package-lock.json
-  Dockerfile
-frontend/
-  src/                  # React 관리자 화면
-  package.json
-  package-lock.json
-  Dockerfile
-  nginx.conf
-docker-compose.yml      # 로컬 통합 실행
-```
-
-두 앱은 의존성, lock 파일, 실행 명령, Docker 이미지가 분리되어 독립적으로 테스트하고 배포할 수 있다. 현재 Docker 구성은 Nginx가 React 정적 파일을 제공하고 Express와 MariaDB를 별도 컨테이너로 실행한다.
-
-## Docker로 전체 실행
-
-```bash
-docker compose build
-docker compose run --rm seed
-docker compose up -d
-```
-
-- 관리자 화면: http://localhost:8080
-- API: http://localhost:3000/api/foods
-- Swagger: http://localhost:3000/api/docs
-- 준비 상태: http://localhost:3000/health/ready
-
-프런트엔드 Nginx가 `/api`와 `/health` 요청을 API 컨테이너로 프록시한다. MariaDB 데이터는 `mariadb-data` 볼륨에 보관된다.
-
-## 실제 도메인
-
-실제 EC2에 배포한 환경은 아래 도메인으로 접근할 수 있다.
-
-- 관리자 화면: https://anna.swot-cat.com/
-- API: https://anna.swot-cat.com/api/foods
 - Swagger: https://anna.swot-cat.com/api/docs
 - 준비 상태: https://anna.swot-cat.com/health/ready
 
@@ -76,39 +43,6 @@ npm run dev
 관리자 키가 비어 있으면 API가 조회 전용으로 동작한다. 쓰기 요청에는 `.env.local`의 `ADMIN_API_KEY`와 같은 값을 전달한다.
 
 Docker Compose도 로컬 개발 설정인 `backend/.env.local`을 읽는다. `DATABASE_HOST`와 `DATABASE_PORT`는 Express 연결 위치이고 `MARIADB_*`는 Express와 MariaDB 컨테이너가 함께 사용하는 DB 설정이다. 실제 환경 파일은 Git에 포함하지 않고 `.env.local.example`만 공유한다.
-
-`LOG_LEVEL`은 로컬에서 기본 `debug`, 운영에서 기본 `info`를 사용한다. 로컬 로그는 읽기 쉬운 한 줄 형식이며 운영 로그는 JSON으로 표준 출력에 기록된다. 로컬·EC2 운영 모두 `docker compose logs -f api`로 같은 방식으로 확인한다. 지금은 별도 로그 수집기가 없어 컨테이너를 재시작하면 그 이전 로그는 사라지는데, 트래픽이 늘면 CloudWatch Logs나 Loki 같은 도구로 표준 출력을 영구 보관하는 방안을 검토할 수 있다.
-
-```http
-Authorization: Bearer <ADMIN_API_KEY>
-```
-
-API는 `food_name`(식품명), `research_year`(조사연도), `maker_name`(지역/제조사), `food_code`(식품코드) 검색 조건을 지원하며 동시에 조합할 수 있다.
-
-```bash
-curl -G --data-urlencode 'food_name=김치' http://localhost:3000/api/foods
-```
-
-조건마다 부분 일치와 정확 일치를 다르게 적용했고 대소문자·공백도 처리한다. 설계 근거와 검증 결과는 [구현 보고서](#3-검색-api)에 정리했다.
-
-목록은 ID 기반 커서 페이지네이션을 사용한다. 첫 요청에서는 `cursor`를 생략하고, 다음 요청에는 이전 응답의 `next_cursor`를 전달한다. `has_next`가 `false`이면 마지막 목록이다.
-
-```bash
-curl 'http://localhost:3000/api/foods?page_size=20&cursor=20'
-```
-
-| 메서드 | 경로                | 기능           |
-| ------ | ------------------- | -------------- |
-| GET    | `/api/foods`        | 검색과 목록    |
-| GET    | `/api/foods/:id`    | 단건 조회      |
-| POST   | `/api/foods`        | 생성           |
-| PATCH  | `/api/foods/:id`    | 부분 수정      |
-| DELETE | `/api/foods/:id`    | 삭제           |
-| POST   | `/api/admin/verify` | 관리자 키 확인 |
-
-응답의 HTTP 상태와 세부 문자열 코드는 [Result Code 문서](backend/docs/result-codes.md)에서 확인할 수 있다.
-
-식품코드는 UNIQUE 인덱스, 연도와 ID는 복합 인덱스를 사용한다. Sequelize 모델과 Umzug 마이그레이션을 분리했으며 `sequelize.sync({ alter: true })`는 사용하지 않는다. 엑셀 적재는 InnoDB 트랜잭션에서 실행되며 오류가 발생하면 전체를 롤백한다. 재적재 시 기존 코드를 건너뛴다. 원본 분석과 변환 규칙은 [구현 보고서](#1-데이터-적재)에 정리했다.
 
 ### 테스트
 
@@ -291,6 +225,12 @@ GET /api/foods?food_code=D000006
 | PATCH | `/api/foods/:id` | 관리자 | 전달된 필드만 부분 수정 |
 | DELETE | `/api/foods/:id` | 관리자 | 삭제 |
 
+쓰기 요청에는 다음 관리자 인증 헤더가 필요하다. 응답의 HTTP 상태와 세부 문자열 코드는 [Result Code 문서](backend/docs/result-codes.md)에서 확인할 수 있다.
+
+```http
+Authorization: Bearer <ADMIN_API_KEY>
+```
+
 `GET /api/foods`는 검색 조건 없이도 호출할 수 있는 기본 목록 조회 엔드포인트다. 검색 조건 조합, 커서 페이지네이션 동작은 [3. 검색 API](#3-검색-api)에서 자세히 다룬다.
 
 - **입력 검증**: `src/utils/validator.js`의 Zod 스키마가 `food_cd`(trim, 대문자 변환, 형식 정규식), `food_name`(1~300자), 영양성분 10개 필드(0 이상 nullable 숫자)를 등록 전에 검사한다. `.strict()`로 정의에 없는 필드는 거부하고, PATCH는 등록 스키마를 `.partial()`로 완화하되 `refine`으로 빈 객체는 막는다.
@@ -433,6 +373,12 @@ ok 7 - 동시 중복 생성은 하나만 성공
   | `research_year` | 정확 일치 | 연도는 범위가 아니라 특정 값이라 부분 일치가 의미 없다 |
   | `food_code` | 정확 일치 | 고유 식별자이므로 부분 일치하면 관련 없는 결과가 섞인다 |
 
+  예를 들어 식품명으로 검색할 수 있다.
+
+  ```bash
+  curl -G --data-urlencode 'food_name=김치' http://localhost:3000/api/foods
+  ```
+
   부분 일치는 `LOCATE(검색어, 컬럼)`으로 구현했다([FoodService.js:21-24](02-food-nutrition-api/backend/src/services/FoodService.js#L21-L24)). `LIKE` 대신 `LOCATE`를 쓴 이유는 사용자가 입력한 `%`, `_`를 SQL 와일드카드가 아니라 검색어 그대로의 문자로 처리하기 위해서다 — `LIKE`였다면 `%` 한 글자만 입력해도 전체 테이블이 매치되는 예상 밖의 동작이 생긴다.
 
   대소문자와 공백도 필드마다 다르게 다룬다.
@@ -467,6 +413,10 @@ GET /api/foods?page_size=101
 ```
 
 `next_cursor`를 다음 요청의 `cursor`로 그대로 전달하면 이어지는 페이지를 받고, `has_next`가 `false`이면 마지막 페이지임을 뜻한다.
+
+```bash
+curl 'http://localhost:3000/api/foods?page_size=20&cursor=20'
+```
 
 ### 검증
 
@@ -751,7 +701,11 @@ CD 워크플로(`deploy.yml`)는 실제 `main` 병합으로 트리거해 성공�
 
 SSH 접속은 GitHub Actions 러너의 아웃바운드 IP가 유동적이라 특정 IP로 제한하기 어려워, 배포 전용 키 분리와 키 기반 인증으로 위험을 줄였다. 규모가 커지면 포트를 열지 않는 AWS SSM Session Manager나 CodeDeploy 방식으로 바꾸는 편이 더 안전하다.
 
-## 6. 검색 성능을 고려한 인덱스 설계
+## 6. 운영 로그
+
+`LOG_LEVEL`은 로컬에서 기본 `debug`, 운영에서 기본 `info`를 사용한다. 로컬 로그는 읽기 쉬운 한 줄 형식이며 운영 로그는 JSON으로 표준 출력에 기록된다. 로컬·EC2 운영 모두 `docker compose logs -f api`로 같은 방식으로 확인한다. 지금은 별도 로그 수집기가 없어 컨테이너를 재시작하면 그 이전 로그는 사라지는데, 트래픽이 늘면 CloudWatch Logs나 Loki 같은 도구로 표준 출력을 영구 보관하는 방안을 검토할 수 있다.
+
+## 7. 검색 성능을 고려한 인덱스 설계
 
 ### 현재 인덱스 구성
 
@@ -799,7 +753,7 @@ research_year 분포: 2019=6759, 2020=863, 2018=60, 2021=1
 
 정리하면: (1) B-Tree 구조상 `LOCATE`는 애초에 인덱스를 탈 수 없는 조건이고, (2) FULLTEXT가 이론적인 해결책이지만 한글에서는 정확도 문제로 채택하지 않았으며, (3) 지금 규모에서는 정확도를 지키는 현재 방식을 유지하는 것이 합리적이다. 데이터가 크게 늘어 실제로 속도가 문제가 되면, 앞부분 일치로 검색 범위를 제한하거나 Elasticsearch/OpenSearch, PostgreSQL + `pg_trgm` 같은 대안을 검토해야 한다.
 
-## 7. 대규모 트래픽 대비한 API 설계
+## 8. 대규모 트래픽 대비한 API 설계
 
 ### 이미 반영한 것
 
@@ -830,14 +784,13 @@ research_year 분포: 2019=6759, 2020=863, 2018=60, 2021=1
 
 DB가 단일 인스턴스다. [5. 배포](#5-배포)에도 적었듯, 트래픽이 커지면 API와 DB를 분리하고 Amazon RDS 같은 관리형 서비스로 옮기는 편이 백업·장애 복구·읽기 복제본(read replica) 구성에 유리하다.
 
-## 8. 소감
+## 9. 소감
 
 이번 과제를 하면서 가장 아쉬웠던점이 협업에 도움이 되는 깃허브 커밋 단위나 커밋 메시지 작성 방법이였습니다. 아직 부족한 것 같아 좀더 공부해야겠다는 생각을 했습니다. 
 
 구현하면서 지금은 관리자 인증 미들웨어만 만들었는데 사용자 인증 미들웨어도 넣고 싶고, 관리자 화면도 만들었으니 인증도 신경쓰고 싶은 생각이 들었습니다.
 api 부분도 좀더 보안에 신경써서 만들면 좋겠다고 생각했습니다.
 
+7번(인덱스 설계)과 8번(대규모 트래픽 대비 API 설계)은 특히 어려웠습니다. rate limit, 커넥션 풀, 커서 페이지네이션처럼 이미 갖춘 것들이 실제 트래픽 앞에서 충분한지, 다음엔 뭘 더 손대야 하는지 스스로도 확신이 서지 않았습니다. 인덱스 설계 같은 경우는 평소엔 DB 인덱스라고 하면 그냥 컬럼에 인덱스 하나 거는 것 정도로만 알고 있었는데, 이번 과제를 통해 대용량 데이터에서는 그 안에서도 방법이 다양하게 있다는것을 알게 되었습니다.
 
-6번(인덱스 설계)과 7번(대규모 트래픽 대비 API 설계)은 특히 어려웠다. rate limit, 커넥션 풀, 커서 페이지네이션처럼 이미 갖춘 것들이 실제 트래픽 앞에서 충분한지, 다음엔 뭘 더 손대야 하는지 스스로도 확신이 서지 않았다. 인덱스 설계 같은 경우는 평소엔 DB 인덱스라고 하면 그냥 컬럼에 인덱스 하나 거는 것 정도로만 알고 있었는데, 이번 과제를 통해 대용량 데이터에서는 그 안에서도 방법이 다양하게 갈린다는 걸 알게 된것 같습니다. 대규모 트래픽 대비 api 설계같은 경우는 지금 규모에서는 검증할 방법이 마땅치 않다 보니 더더욱 공부가 필요하다고 느꼇습니다.
-
-
+이번 과제를 통해서 평가라는 큰 목적을 가지고 수행했지만, 지난 개발 경험과 가지고 있던 지식들을 돌이켜보고 되새길수 있었던 좋은 경험이였습니다. 과제에서 원하는 바가 어떤것을 알고 싶어하는것인지 파악하면서 이점이 실제로 개발자로서 중요한 부분이다 생각하면서 더 좋은 개발자가 되기위해 성장하게된 경험이라고 생각하였습니다.
