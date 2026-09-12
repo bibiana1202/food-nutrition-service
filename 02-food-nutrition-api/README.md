@@ -25,6 +25,39 @@ backend/
   tests/
   package.json
   package-lock.json
+  Dockerfile
+frontend/
+  src/                  # React 관리자 화면
+  package.json
+  package-lock.json
+  Dockerfile
+  nginx.conf
+docker-compose.yml      # 로컬 통합 실행
+```
+
+두 앱은 의존성, lock 파일, 실행 명령, Docker 이미지가 분리되어 독립적으로 테스트하고 배포할 수 있다. 현재 Docker 구성은 Nginx가 React 정적 파일을 제공하고 Express와 MariaDB를 별도 컨테이너로 실행한다.
+
+## Docker로 전체 실행
+
+```bash
+docker compose build
+docker compose run --rm seed
+docker compose up -d
+```
+
+- 관리자 화면: http://localhost:8080
+- API: http://localhost:3000/api/foods
+- Swagger: http://localhost:3000/api/docs
+- 준비 상태: http://localhost:3000/health/ready
+
+프런트엔드 Nginx가 `/api`와 `/health` 요청을 API 컨테이너로 프록시한다. MariaDB 데이터는 `mariadb-data` 볼륨에 보관된다.
+
+## 실제 도메인
+
+실제 EC2에 배포한 환경은 아래 도메인으로 접근할 수 있다.
+
+- 관리자 화면: https://anna.swot-cat.com/
+- API: https://anna.swot-cat.com/api/foods
 - Swagger: https://anna.swot-cat.com/api/docs
 - 준비 상태: https://anna.swot-cat.com/health/ready
 
@@ -47,8 +80,8 @@ Docker Compose도 로컬 개발 설정인 `backend/.env.local`을 읽는다. `DA
 ### 테스트
 
 ```bash
-cd backend
 docker compose up -d db
+cd backend
 set -a && source .env.local && set +a
 npm run test:docker
 ```
@@ -71,7 +104,7 @@ npm run build
 
 개발 서버는 `/api` 요청을 `http://127.0.0.1:3000`으로 프록시한다. 빌드 결과는 `frontend/dist`에 생성된다.
 
-운영 백엔드는 `docker-compose.prod.yml`이 `backend/.env.production`을 `env_file`로 직접 읽는다(`npm start`를 따로 실행하지 않고 컨테이너가 `node server.js`로 기동한다). 이 파일은 `.env.production.example`을 기준으로 서버에 직접 만들고 git에는 올리지 않는다. 자세한 내용은 [5. 배포의 실제 배포 작업 기록](#5-배포)에 정리했다. 프런트엔드의 `VITE_*` 값은 브라우저 번들에 공개되므로 비밀값을 넣지 않으며, 프런트엔드와 API가 같은 도메인을 쓰는 지금 구조에서는 `VITE_API_BASE_URL`을 비워둔다(상대경로 `/api`로 호출).
+운영 백엔드는 `docker-compose.prod.yml`이 `backend/.env.production`을 `env_file`로 직접 읽는다(`npm start`를 따로 실행하지 않고 컨테이너가 `node server.js`로 기동한다). 이 파일은 `.env.production.example`을 기준으로 서버에 직접 만들고 git에는 올리지 않는다. 자세한 내용은 [5. 배포](#5-배포)의 실제 배포 작업 기록에 정리했다. 프런트엔드의 `VITE_*` 값은 브라우저 번들에 공개되므로 비밀값을 넣지 않으며, 프런트엔드와 API가 같은 도메인을 쓰는 지금 구조에서는 `VITE_API_BASE_URL`을 비워둔다(상대경로 `/api`로 호출).
 
 # 구현 보고서
 
@@ -150,9 +183,13 @@ GET /api/foods?food_code=D000006
 
 대표 데이터 검색 시 `꿩불고기`와 원본 영양성분이 반환되는 것을 확인했다. 따라서 원본 파일 읽기, 데이터 정제와 검증, MariaDB 적재, API 조회까지 요구사항의 전체 흐름을 구현했다.
 
+### 적재 구조와 트랜잭션
+
+식품코드에는 UNIQUE 제약을 두고, `research_year`와 `id`에는 복합 인덱스를 사용한다. Sequelize 모델과 Umzug 마이그레이션을 분리했으며 `sequelize.sync({ alter: true })`는 사용하지 않는다. 엑셀 적재 전체는 InnoDB 트랜잭션에서 실행되므로 오류가 발생하면 모든 워크시트의 적재 작업을 롤백한다.
+
 ### 재실행 시 중복 방지
 
-`ImportService.importFoods`는 `food_cd` UNIQUE 인덱스를 근거로 `Food.bulkCreate(batch, { ignoreDuplicates: true, ... })`를 사용한다. 이미 저장된 식품코드는 조용히 건너뛰고 새 코드만 INSERT하므로, 같은 파일을 여러 번 적재해도 행이 중복되지 않고 그 사이 관리자가 수정한 값도 덮어쓰지 않는다. 워크시트 하나 전체를 하나의 트랜잭션으로 묶어 처리하므로 중간 행에서 오류가 나면 해당 시트의 적재분 전체가 롤백된다.
+`ImportService.importFoods`는 `food_cd` UNIQUE 제약을 근거로 `Food.bulkCreate(batch, { ignoreDuplicates: true, ... })`를 사용한다. 이미 저장된 식품코드는 조용히 건너뛰고 새 코드만 INSERT하므로, 같은 파일을 여러 번 적재해도 행이 중복되지 않고 그 사이 관리자가 수정한 값도 덮어쓰지 않는다.
 
 이미 7,683건이 적재된 상태에서 `docker compose run --rm seed`를 다시 실행한 실제 결과다.
 
@@ -200,10 +237,10 @@ GET /api/foods?food_code=D000006
 
 - **결측값**: 빈 문자열, `-`, `N/A`, `NA`, `NULL`은 모두 결측으로 보고 `null`로 저장한다. 0과 결측을 구분해야 하므로 빈 값을 0으로 바꾸지 않는다.
 - **한정 표현("1g 미만" 등)**: 영양성분 셀이 `숫자 + (g|mg)? + 미만` 형태이면 그 필드는 확정 수치로 만들지 않고 `null`로 저장한다. 대신 원문을 `필드명: 원문` 형태로 모아 `source_notes`에 남겨 상세 조회에서 원래 표현을 확인할 수 있게 한다. 원본에는 총당류 12건, 단백질 3건, 탄수화물 1건이 이 패턴이다.
-- **숫자 변환**: 정수·소수와 `1,234.5` 같은 천 단위 구분 표기만 정규식으로 허용한 뒤 숫자로 바꾼다. `1,2`, `12mg`, 음수, `NaN`, `Infinity`처럼 형식이 애매하거나 잘못된 값은 오류로 처리해 시트 번호와 행 번호를 포함한 메시지와 함께 적재를 중단한다. 250행 단위로 묶은 배치가 트랜잭션 하나이므로, 한 행이라도 잘못되면 그 배치 전체가 롤백된다.
+- **숫자 변환**: 정수·소수와 `1,234.5` 같은 천 단위 구분 표기만 정규식으로 허용한 뒤 숫자로 바꾼다. `1,2`, `12mg`, 음수, `NaN`, `Infinity`처럼 형식이 애매하거나 잘못된 값은 오류로 처리해 시트 번호와 행 번호를 포함한 메시지와 함께 적재를 중단한다. 각 워크시트의 행을 배치로 모아 적재하고 전체 워크북 적재를 하나의 트랜잭션으로 묶으므로, 한 행이라도 잘못되면 모든 워크시트의 적재가 롤백된다.
 - **서식·수식 셀**: ExcelJS가 richText나 수식으로 반환하는 셀도 계산 결과와 텍스트를 재귀적으로 풀어 같은 방식으로 검사한다.
 
-`tests/importer.test.js`가 이 처리를 검증한다. `엑셀 매핑, 0, 단위, 미만 표현, 중복 방지` 테스트는 `1,234.5`가 `1234.5`로, 문자열 `0`이 숫자 `0`으로 바뀌고 `1g 미만`은 `null`과 `source_notes: "protein: 1g 미만"`으로 저장되는지 확인한다. `모호하거나 잘못된 숫자를 거부` 테스트는 `1,2`, `1mg`, `-1`, `NaN`, `Infinity`, `1e999`를 모두 거부하는지 확인하고, `잘못된 행은 전체 트랜잭션 롤백` 테스트는 251행 중 마지막 행에만 잘못된 숫자를 넣어 배치 전체가 저장되지 않는지 확인한다.
+`tests/importer.test.js`가 이 처리를 검증한다. `엑셀 매핑, 0, 단위, 미만 표현, 중복 방지` 테스트는 `1,234.5`가 `1234.5`로, 문자열 `0`이 숫자 `0`으로 바뀌고 `1g 미만`은 `null`과 `source_notes: "protein: 1g 미만"`으로 저장되는지 확인한다. `모호하거나 잘못된 숫자를 거부` 테스트는 `1,2`, `1mg`, `-1`, `NaN`, `Infinity`, `1e999`를 모두 거부하는지 확인하고, `잘못된 행은 전체 트랜잭션 롤백` 테스트는 251행 중 마지막 행에만 잘못된 숫자를 넣어 전체 워크북 적재가 저장되지 않는지 확인한다.
 
 ### 현재 한계와 개선 방향
 
@@ -224,6 +261,7 @@ GET /api/foods?food_code=D000006
 | POST | `/api/foods` | 관리자 | 등록 |
 | PATCH | `/api/foods/:id` | 관리자 | 전달된 필드만 부분 수정 |
 | DELETE | `/api/foods/:id` | 관리자 | 삭제 |
+| POST | `/api/admin/verify` | 관리자 | 관리자 키 확인 |
 
 쓰기 요청에는 다음 관리자 인증 헤더가 필요하다. 응답의 HTTP 상태와 세부 문자열 코드는 [Result Code 문서](backend/docs/result-codes.md)에서 확인할 수 있다.
 
@@ -235,7 +273,7 @@ Authorization: Bearer <ADMIN_API_KEY>
 
 - **입력 검증**: `src/utils/validator.js`의 Zod 스키마가 `food_cd`(trim, 대문자 변환, 형식 정규식), `food_name`(1~300자), 영양성분 10개 필드(0 이상 nullable 숫자)를 등록 전에 검사한다. `.strict()`로 정의에 없는 필드는 거부하고, PATCH는 등록 스키마를 `.partial()`로 완화하되 `refine`으로 빈 객체는 막는다.
 - **관리자 인증**: `requireAdmin` 미들웨어가 `Authorization: Bearer <ADMIN_API_KEY>` 값을 SHA-256 해시로 만든 뒤 `timingSafeEqual`로 비교한다. 관리자 키가 설정되지 않은 배포에서는 쓰기 요청 자체를 503(`ADMIN_KEY_NOT_CONFIGURED`)으로 막아 읽기 전용 운영을 지원한다.
-- **중복 방지**: `food_cd`에 UNIQUE 인덱스를 두고, 애플리케이션 검증을 통과해도 DB가 거부하면 `errorHandler`가 `UniqueConstraintError`를 409(`DUPLICATE_FOOD_CODE`)로 변환한다. 동시에 같은 코드로 등록을 시도해도 DB 제약이 최종 방어선이 되므로 경쟁 조건에서도 하나만 성공한다.
+- **중복 방지**: `food_cd`에 UNIQUE 제약을 두고, 애플리케이션 검증을 통과해도 DB가 거부하면 `errorHandler`가 `UniqueConstraintError`를 409(`DUPLICATE_FOOD_CODE`)로 변환한다. 동시에 같은 코드로 등록을 시도해도 DB 제약이 최종 방어선이 되므로 경쟁 조건에서도 하나만 성공한다.
 - **존재하지 않는 리소스**: `FoodService.get/update/remove`는 대상이 없으면 `ApiError(FOOD_NOT_FOUND)`를 던지고 컨트롤러는 이를 그대로 상위로 전달해 공통 오류 응답으로 처리한다.
 - **응답 형식**: 모든 성공 응답은 `{ success, code, message, data, request_id }` 형식이며 등록 성공 시 `Location` 헤더에 생성된 리소스 경로를 함께 반환한다. 삭제는 본문 없는 204를 반환한다.
 - **오류 처리 일관성**: 성공·실패 응답 모두 `{ success, code, message, data|details, request_id }` 형식을 따른다. `src/constants/resultCodes.js`가 HTTP 상태, 문자열 코드, 메시지를 한 곳에서 관리하고(`docs/result-codes.md`에 문서화), `errorHandler` 미들웨어가 다음 예외를 모두 해당 코드로 변환한다.
@@ -421,7 +459,9 @@ curl 'http://localhost:3000/api/foods?page_size=20&cursor=20'
 ### 검증
 
 ```bash
-npm test
+cd backend
+set -a && source .env.local && set +a
+npm run test:docker
 ```
 
 ```text
