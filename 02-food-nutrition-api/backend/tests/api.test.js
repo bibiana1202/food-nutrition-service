@@ -180,3 +180,13 @@ test('관리자 키가 없으면 읽기 전용', async () => {
     await new Promise((resolve) => readonlyServer.close(resolve));
   }
 });
+
+test('다른 식품의 코드로 수정하면 409이고 기존 데이터는 보존된다', async () => {
+  await request('/api/foods', 'POST', { food_cd: 'PATCH-DUPE-A', food_name: 'A' });
+  const created = await request('/api/foods', 'POST', { food_cd: 'PATCH-DUPE-B', food_name: 'B' });
+  const url = `/api/foods/${created.body.data.id}`;
+  const result = await request(url, 'PATCH', { food_cd: 'PATCH-DUPE-A' });
+  assert.equal(result.response.status, 409);
+  assert.equal(result.body.code, 'DUPLICATE_FOOD_CODE');
+  assert.equal((await request(url)).body.data.food_cd, 'PATCH-DUPE-B');
+});

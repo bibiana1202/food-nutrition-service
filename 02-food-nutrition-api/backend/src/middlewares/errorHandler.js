@@ -1,4 +1,8 @@
-const { DatabaseError } = require('sequelize');
+const {
+  FoodNotFoundError,
+  DuplicateFoodCodeError,
+  StorageBusyError,
+} = require('../errors/foodErrors');
 const { ZodError } = require('zod');
 const RESULT_CODES = require('../constants/resultCodes');
 const logger = require('../utils/logger');
@@ -25,7 +29,11 @@ function errorHandler(exception, request, response, _next) {
   let error = exception instanceof ApiError ? exception : new ApiError(RESULT_CODES.INTERNAL_ERROR);
 
   // 요청 값 검증 실패 시 필드별 오류를 details 배열로 제공한다.
-  if (exception instanceof ZodError) {
+  if (exception instanceof FoodNotFoundError) {
+    error = new ApiError(RESULT_CODES.FOOD_NOT_FOUND);
+  } else if (exception instanceof DuplicateFoodCodeError) {
+    error = new ApiError(RESULT_CODES.DUPLICATE_FOOD_CODE);
+  } else if (exception instanceof ZodError) {
     error = new ApiError(
       RESULT_CODES.VALIDATION_ERROR,
       exception.issues.map((issue) => ({ field: issue.path.join('.'), message: issue.message })),
@@ -38,8 +46,7 @@ function errorHandler(exception, request, response, _next) {
     error = new ApiError(RESULT_CODES.PAYLOAD_TOO_LARGE);
   } else if (
     // 잠금 대기 초과와 교착 상태는 잠시 후 재시도할 수 있는 일시적 DB 오류로 처리한다.
-    exception instanceof DatabaseError &&
-    ['ER_LOCK_WAIT_TIMEOUT', 'ER_LOCK_DEADLOCK'].includes(exception.parent?.code)
+    exception instanceof StorageBusyError
   ) {
     error = new ApiError(RESULT_CODES.DATABASE_BUSY);
     response.setHeader('Retry-After', '1');

@@ -1,7 +1,7 @@
 const path = require('node:path');
 const { connectDatabase, closeDatabase } = require('../config/database');
 const { migrateDatabase } = require('../config/migrator');
-const { importFoods } = require('../services/ImportService');
+const { importFoods } = require('../container');
 const logger = require('../utils/logger');
 
 async function seedFoods(filename = path.join(__dirname, '../../data/foods.xlsx')) {

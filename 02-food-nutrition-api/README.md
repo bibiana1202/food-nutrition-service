@@ -19,7 +19,10 @@ backend/
     models/             # Sequelize 모델과 관계 등록
     migrations/         # 실행 이력이 관리되는 스키마 변경
     routes/api/         # Express API 라우트
-    services/           # CRUD와 엑셀 적재 로직
+    services/           # 저장소 계약만 사용하는 업무 로직·엑셀 정규화
+    repositories/       # 저장소 계약과 Sequelize 구현(SQL·트랜잭션·오류 변환)
+    errors/             # HTTP·ORM에 의존하지 않는 공통 오류
+    container.js        # 저장소 구현 선택과 서비스 생성자 주입
     scripts/            # migrate / seed / verify CLI
     utils/              # Zod 입력 검증
   tests/
@@ -89,7 +92,7 @@ set -a && source .env.local && set +a
 npm run test:docker
 ```
 
-`npm run test:docker`는 `db` 컨테이너 안에 `food_nutrition_test` DB를 생성·권한 부여한 뒤 `npm test`를 실행한다. `tests/api.test.js`(CRUD, 검색 조건 조합, 인증, 오류 응답)와 `tests/importer.test.js`(엑셀 적재 로직, 원본 7,683건 적재)를 합쳐 총 14개 테스트를 실행한다. 테스트 구성과 요구사항별 커버리지는 [구현 보고서의 4. 테스트](#4-테스트)에 정리했다.
+`npm run test:docker`는 `db` 컨테이너 안에 `food_nutrition_test` DB를 생성·권한 부여한 뒤 `npm test`를 실행한다. `tests/api.test.js`(CRUD, 검색 조건 조합, 인증, 오류 응답)와 `tests/importer.test.js`(엑셀 적재 로직, 원본 7,683건 적재)와 `tests/services.test.js`, `tests/repository.test.js`를 합쳐 총 25개 테스트를 실행한다. 테스트 구성과 요구사항별 커버리지는 [구현 보고서의 4. 테스트](#4-테스트)에 정리했다.
 
 DB 통합 테스트는 GitHub Actions에서도 실행한다. CI는 작업마다 임시 MariaDB의 `food_nutrition_test` 데이터베이스를 만들고 테스트가 끝나면 폐기한다. 테스트 실행기는 `NODE_ENV=test`와 `_test`로 끝나는 DB 이름을 모두 확인하므로 개발·운영 DB를 실수로 초기화하지 않는다.
 
@@ -192,7 +195,7 @@ GET /api/foods?food_code=D000006
 
 ### 재실행 시 중복 방지
 
-`ImportService.importFoods`는 `food_cd` UNIQUE 제약을 근거로 `Food.bulkCreate(batch, { ignoreDuplicates: true, ... })`를 사용한다. 이미 저장된 식품코드는 조용히 건너뛰고 새 코드만 INSERT하므로, 같은 파일을 여러 번 적재해도 행이 중복되지 않고 그 사이 관리자가 수정한 값도 덮어쓰지 않는다.
+`ImportService.importFoods`는 검증된 배치를 저장소에 전달하고, `SequelizeFoodRepository.importBatches`가 `food_cd` UNIQUE 제약을 근거로 `Food.bulkCreate(batch, { ignoreDuplicates: true, ... })`를 사용한다. 이미 저장된 식품코드는 조용히 건너뛰고 새 코드만 INSERT하므로, 같은 파일을 여러 번 적재해도 행이 중복되지 않고 그 사이 관리자가 수정한 값도 덮어쓰지 않는다.
 
 이미 7,683건이 적재된 상태에서 `docker compose run --rm seed`를 다시 실행한 실제 결과다.
 
@@ -276,8 +279,8 @@ Authorization: Bearer <ADMIN_API_KEY>
 
 - **입력 검증**: `src/utils/validator.js`의 Zod 스키마가 `food_cd`(trim, 대문자 변환, 형식 정규식), `food_name`(1~300자), 영양성분 10개 필드(0 이상 nullable 숫자)를 등록 전에 검사한다. `.strict()`로 정의에 없는 필드는 거부하고, PATCH는 등록 스키마를 `.partial()`로 완화하되 `refine`으로 빈 객체는 막는다.
 - **관리자 인증**: `requireAdmin` 미들웨어가 `Authorization: Bearer <ADMIN_API_KEY>` 값을 SHA-256 해시로 만든 뒤 `timingSafeEqual`로 비교한다. 관리자 키가 설정되지 않은 배포에서는 쓰기 요청 자체를 503(`ADMIN_KEY_NOT_CONFIGURED`)으로 막아 읽기 전용 운영을 지원한다.
-- **중복 방지**: `food_cd`에 UNIQUE 제약을 두고, 애플리케이션 검증을 통과해도 DB가 거부하면 `errorHandler`가 `UniqueConstraintError`를 409(`DUPLICATE_FOOD_CODE`)로 변환한다. 동시에 같은 코드로 등록을 시도해도 DB 제약이 최종 방어선이 되므로 경쟁 조건에서도 하나만 성공한다.
-- **존재하지 않는 리소스**: `FoodService.get/update/remove`는 대상이 없으면 `ApiError(FOOD_NOT_FOUND)`를 던지고 컨트롤러는 이를 그대로 상위로 전달해 공통 오류 응답으로 처리한다.
+- **중복 방지**: `food_cd`에 UNIQUE 제약을 두고, 애플리케이션 검증을 통과해도 DB가 거부하면 Repository가 `UniqueConstraintError`를 `DuplicateFoodCodeError`로 변환하고, `errorHandler`가 이를 409(`DUPLICATE_FOOD_CODE`)로 응답한다. 등록과 수정에 같은 규칙을 적용한다. 동시에 같은 코드로 등록을 시도해도 DB 제약이 최종 방어선이 되므로 경쟁 조건에서도 하나만 성공한다.
+- **존재하지 않는 리소스**: `FoodService.get/update/remove`는 대상이 없으면 `FoodNotFoundError`를 던지고 컨트롤러는 이를 그대로 상위로 전달해 공통 오류 응답으로 처리한다.
 - **응답 형식**: 모든 성공 응답은 `{ success, code, message, data, request_id }` 형식이며 등록 성공 시 `Location` 헤더에 생성된 리소스 경로를 함께 반환한다. 삭제는 본문 없는 204를 반환한다.
 - **오류 처리 일관성**: 성공·실패 응답 모두 `{ success, code, message, data|details, request_id }` 형식을 따른다. `src/constants/resultCodes.js`가 HTTP 상태, 문자열 코드, 메시지를 한 곳에서 관리하고(`docs/result-codes.md`에 문서화), `errorHandler` 미들웨어가 다음 예외를 모두 해당 코드로 변환한다.
 
@@ -420,7 +423,7 @@ ok 7 - 동시 중복 생성은 하나만 성공
   curl -G --data-urlencode 'food_name=김치' http://localhost:3000/api/foods
   ```
 
-  부분 일치는 `LOCATE(검색어, 컬럼)`으로 구현했다([FoodService.js:21-24](02-food-nutrition-api/backend/src/services/FoodService.js#L21-L24)). `LIKE` 대신 `LOCATE`를 쓴 이유는 사용자가 입력한 `%`, `_`를 SQL 와일드카드가 아니라 검색어 그대로의 문자로 처리하기 위해서다 — `LIKE`였다면 `%` 한 글자만 입력해도 전체 테이블이 매치되는 예상 밖의 동작이 생긴다.
+  부분 일치는 `LOCATE(검색어, 컬럼)`으로 구현했다([SequelizeFoodRepository.js](backend/src/repositories/SequelizeFoodRepository.js)). `LIKE` 대신 `LOCATE`를 쓴 이유는 사용자가 입력한 `%`, `_`를 SQL 와일드카드가 아니라 검색어 그대로의 문자로 처리하기 위해서다 — `LIKE`였다면 `%` 한 글자만 입력해도 전체 테이블이 매치되는 예상 밖의 동작이 생긴다.
 
   대소문자와 공백도 필드마다 다르게 다룬다.
   - `food_name`, `maker_name`: 별도 코드 처리 없이 DB 컬럼 collation(`utf8mb4_unicode_ci`, 대소문자 구분 안 함)에 맡긴다. `LOCATE('cola','Coca-Cola')`와 `LOCATE('COLA','Coca-Cola')`가 같은 위치를 반환하는 것으로 확인했다.
@@ -837,3 +840,25 @@ api 부분도 좀더 보안에 신경써서 만들면 좋겠다고 생각했습�
 7번(인덱스 설계)과 8번(대규모 트래픽 대비 API 설계)은 특히 어려웠습니다. rate limit, 커넥션 풀, 커서 페이지네이션처럼 이미 갖춘 것들이 실제 트래픽 앞에서 충분한지, 다음엔 뭘 더 손대야 하는지 스스로도 확신이 서지 않았습니다. 인덱스 설계 같은 경우는 평소엔 DB 인덱스라고 하면 그냥 컬럼에 인덱스 하나 거는 것 정도로만 알고 있었는데, 이번 과제를 통해 대용량 데이터에서는 그 안에서도 방법이 다양하게 있다는것을 알게 되었습니다.
 
 이번 과제를 통해서 평가라는 큰 목적을 가지고 수행했지만, 지난 개발 경험과 가지고 있던 지식들을 돌이켜보고 되새길수 있었던 좋은 경험이였습니다. 과제에서 원하는 바가 어떤것을 알고 싶어하는것인지 파악하면서 이점이 실제로 개발자로서 중요한 부분이다 생각하면서 더 좋은 개발자가 되기위해 성장하게된 경험이라고 생각하였습니다.
+
+## Service와 Repository의 의존성 분리
+
+`Controller → Service → 저장소 계약`으로 업무 흐름을 구성하고, `container.js`에서 `SequelizeFoodRepository`를 생성자에 주입한다. Service를 불러오거나 테스트할 때 Sequelize·MariaDB·DB 설정·HTTP 미들웨어는 로드되지 않는다.
+
+- `FoodService`: 식품 존재 여부와 페이지 응답 구성. 저장소에는 일반 검색 조건과 `limit`만 전달한다.
+- `ImportService`: 엑셀 매핑·값 정규화·검증과 결과 집계. 시트별 배치를 비동기 반복자로 전달하며 DB 트랜잭션 객체는 받지 않는다.
+- `FoodRepository.js`: 메서드, 반환값, 오류, 전체 적재의 원자성을 정의하는 JSDoc 계약이다. JavaScript이므로 정적 인터페이스 강제 기능은 없으며 테스트로 동작을 검증한다.
+- `SequelizeFoodRepository`: SQL 조건, 모델 조회·변경, 전체 적재 트랜잭션을 처리한다. 모델 인스턴스 대신 JSON과 같은 일반 객체를 반환하며 날짜는 ISO 문자열로 변환한다. 원본 ORM 예외는 서비스에 전달하지 않고 공통 오류로 변환한다.
+- `errors/foodErrors.js`: 식품 없음, 중복 코드, 저장소 사용 중·실패를 표현한다. HTTP 상태 코드 매핑은 `errorHandler`가 담당한다.
+
+DB를 바꾸려면 같은 계약을 만족하는 Repository와 조립 지점을 변경한다. 실제 DB 드라이버·스키마·migration·서버 시작 및 헬스체크 같은 인프라의 DB 의존성은 여전히 필요하다. 이번 분리의 범위는 **업무 서비스가 구체적인 DB 구현에 의존하지 않도록 하는 것**이다. 동시 수정 충돌 방지나 UPDATE 후 재조회 사이의 경쟁 조건을 해결하는 변경은 포함하지 않았다.
+
+DB 없이 서비스·저장소 경계를 확인하려면 백엔드 디렉터리에서 실행한다.
+
+```bash
+npm run test:unit
+```
+
+단위 테스트 9개는 DB 접근 금지 상태의 서비스 로딩, 대체 저장소를 통한 CRUD·페이지네이션, 원본 7,683건 정규화, 일반 객체 반환과 공통 오류 변환을 검증한다. 전체 테스트에는 중복 코드 PATCH의 409 응답과 두 번째 시트 실패 시 첫 번째 시트까지 롤백하는 회귀 테스트도 포함한다.
+
+리팩터링 검증 시 로컬 임시 MariaDB 12.1.2에서 전체 25개 테스트와 포맷 검사가 통과했다. CI의 MariaDB 11.4 환경 결과는 별도로 확인해야 한다.

@@ -7,7 +7,8 @@ const ExcelJS = require('exceljs');
 const { connectDatabase, closeDatabase } = require('../src/config/database');
 const { migrateDatabase } = require('../src/config/migrator');
 const { Food } = require('../src/models');
-const { columnMapping, importFoods, numericValue } = require('../src/services/ImportService');
+const { columnMapping, numericValue } = require('../src/services/ImportService');
+const { importFoods } = require('../src/container');
 
 before(async () => {
   await connectDatabase();
@@ -112,4 +113,24 @@ test('원본 7,683건 적재와 재실행 멱등성', async () => {
   assert.equal(sample.calorie, 368.8);
   assert.equal(sample.sodium, 1264.31);
   assert.equal(await Food.count(), 7683);
+});
+
+test('앞 시트 저장 후 다음 시트 검증이 실패해도 전체 롤백한다', async () => {
+  const fixture = await createFixture([{ food_cd: 'ROLLBACK-SHEET', food_name: '국' }]);
+  try {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(fixture.filename);
+    const sheet = workbook.addWorksheet('Invalid');
+    const fields = Object.keys(columnMapping);
+    sheet.addRow(fields.map((field) => columnMapping[field]));
+    const invalid = { food_cd: 'INVALID', food_name: '밥', protein: 'not a number' };
+    sheet.addRow(fields.map((field) => invalid[field] ?? '-'));
+    await workbook.xlsx.writeFile(fixture.filename);
+    const before = await Food.count();
+    await assert.rejects(importFoods(fixture.filename), /2번 시트 2행/);
+    assert.equal(await Food.count(), before);
+    assert.equal(await Food.findOne({ where: { food_cd: 'ROLLBACK-SHEET' } }), null);
+  } finally {
+    await fixture.cleanup();
+  }
 });

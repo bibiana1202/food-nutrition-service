@@ -1,5 +1,5 @@
 const RESULT_CODES = require('../constants/resultCodes');
-const FoodService = require('../services/FoodService');
+const { foodService: FoodService } = require('../container');
 const { sendNoContent, sendSuccess } = require('../utils/responseFormatter');
 const { foodCreateSchema, foodPatchSchema, idSchema, searchSchema } = require('../utils/validator');
 
