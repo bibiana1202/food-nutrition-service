@@ -1,6 +1,4 @@
 const ExcelJS = require('exceljs');
-const { sequelize } = require('../config/database');
-const { Food } = require('../models');
 const { foodCreateSchema, nutrientFields } = require('../utils/validator');
 
 // 애플리케이션 필드와 원본 엑셀의 열 제목을 연결한다.
@@ -77,64 +75,73 @@ function numericValue(text) {
  * @param {string} filename 적재할 엑셀 파일 경로
  * @returns {Promise<{rows: number, inserted: number, skipped: number}>} 적재 결과
  */
-async function importFoods(filename) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(filename);
-  const result = { rows: 0, inserted: 0, skipped: 0 };
-  await sequelize.transaction(async (transaction) => {
-    const before = await Food.count({ transaction });
-    for (const [sheetIndex, sheet] of workbook.worksheets.entries()) {
-      // 첫 행의 제목을 실제 열 번호로 변환하고 필수 열이 모두 존재하는지 확인한다.
-      const columns = new Map();
-      sheet
-        .getRow(1)
-        .eachCell((cell, index) => columns.set(normalizeHeader(cellText(cell.value) || ''), index));
-      for (const title of Object.values(columnMapping))
-        if (!columns.has(normalizeHeader(title))) throw new Error(`필수 열 누락: ${title}`);
-      // 워크시트별로 검증이 끝난 행을 모아 한 번에 INSERT한다.
-      const batch = [];
-      for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber++) {
-        const row = sheet.getRow(rowNumber);
-        if (!row.hasValues) continue;
-        try {
-          const values = {};
-          const notes = [];
-          for (const [field, title] of Object.entries(columnMapping)) {
-            const text = cellText(row.getCell(columns.get(normalizeHeader(title))).value);
-            // '1g 미만'처럼 한정 표현이 붙은 영양성분은 확정 수치로 만들지 않고
-            // null로 저장한 뒤 원문을 source_notes에 보존한다.
-            if (
-              nutrientFields.includes(field) &&
-              text &&
-              /^\d+(?:\.\d+)?\s*(?:g|mg)?\s*미만$/.test(text)
-            ) {
-              values[field] = null;
-              notes.push(`${field}: ${text}`);
-            } else
-              // 연도와 영양성분만 숫자로 변환하고, 나머지 텍스트 필드는 그대로 둔다.
-              values[field] =
-                field === 'research_year' || nutrientFields.includes(field)
-                  ? numericValue(text)
-                  : text;
-          }
-          values.source_notes = notes.length ? notes.join('; ') : null;
-          batch.push(foodCreateSchema.parse(values));
-          result.rows++;
-        } catch (error) {
-          throw new Error(`${sheetIndex + 1}번 시트 ${row.number}행 적재 실패: ${error.message}`, {
-            cause: error,
-          });
-        }
-      }
-      // 식품코드가 이미 존재하면 기존 관리자 수정값을 덮어쓰지 않고 건너뛴다.
-      await Food.bulkCreate(batch, { ignoreDuplicates: true, transaction, validate: true });
-    }
-    // 트랜잭션 안에서 전후 건수를 비교해 실제 추가된 행 수를 계산한다.
-    result.inserted = (await Food.count({ transaction })) - before;
-  });
-  if (!result.rows) throw new Error('적재할 식품 데이터가 없습니다.');
-  result.skipped = result.rows - result.inserted;
-  return result;
-}
+class ImportService {
+  /** @param {import('../repositories/FoodRepository').FoodRepository} repository */
+  constructor(repository) {
+    this.repository = repository;
+  }
 
-module.exports = { cellText, columnMapping, importFoods, numericValue };
+  async importFoods(filename) {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filename);
+    const result = { rows: 0, inserted: 0, skipped: 0 };
+    async function* batches() {
+      for (const [sheetIndex, sheet] of workbook.worksheets.entries()) {
+        // 첫 행의 제목을 실제 열 번호로 변환하고 필수 열이 모두 존재하는지 확인한다.
+        const columns = new Map();
+        sheet
+          .getRow(1)
+          .eachCell((cell, index) =>
+            columns.set(normalizeHeader(cellText(cell.value) || ''), index),
+          );
+        for (const title of Object.values(columnMapping))
+          if (!columns.has(normalizeHeader(title))) throw new Error(`필수 열 누락: ${title}`);
+        // 워크시트별로 검증이 끝난 행을 모아 한 번에 INSERT한다.
+        const batch = [];
+        for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber++) {
+          const row = sheet.getRow(rowNumber);
+          if (!row.hasValues) continue;
+          try {
+            const values = {};
+            const notes = [];
+            for (const [field, title] of Object.entries(columnMapping)) {
+              const text = cellText(row.getCell(columns.get(normalizeHeader(title))).value);
+              // '1g 미만'처럼 한정 표현이 붙은 영양성분은 확정 수치로 만들지 않고
+              // null로 저장한 뒤 원문을 source_notes에 보존한다.
+              if (
+                nutrientFields.includes(field) &&
+                text &&
+                /^\d+(?:\.\d+)?\s*(?:g|mg)?\s*미만$/.test(text)
+              ) {
+                values[field] = null;
+                notes.push(`${field}: ${text}`);
+              } else
+                // 연도와 영양성분만 숫자로 변환하고, 나머지 텍스트 필드는 그대로 둔다.
+                values[field] =
+                  field === 'research_year' || nutrientFields.includes(field)
+                    ? numericValue(text)
+                    : text;
+            }
+            values.source_notes = notes.length ? notes.join('; ') : null;
+            batch.push(foodCreateSchema.parse(values));
+            result.rows++;
+          } catch (error) {
+            throw new Error(
+              `${sheetIndex + 1}번 시트 ${row.number}행 적재 실패: ${error.message}`,
+              {
+                cause: error,
+              },
+            );
+          }
+        }
+        // 식품코드가 이미 존재하면 기존 관리자 수정값을 덮어쓰지 않고 건너뛴다.
+        yield batch;
+      }
+      if (!result.rows) throw new Error('적재할 식품 데이터가 없습니다.');
+    }
+    result.inserted = await this.repository.importBatches(batches());
+    result.skipped = result.rows - result.inserted;
+    return result;
+  }
+}
+module.exports = { ImportService, cellText, columnMapping, numericValue };

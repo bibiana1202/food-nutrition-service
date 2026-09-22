@@ -21,7 +21,8 @@
     "test": "node --require=./tests/testEnvironment.js --test --test-concurrency=1 tests/*.test.js",
     "test:docker": "docker exec 02-food-nutrition-api-db-1 mariadb -uroot -p\"$MARIADB_ROOT_PASSWORD\" -e \"CREATE DATABASE IF NOT EXISTS food_nutrition_test; GRANT ALL PRIVILEGES ON food_nutrition_test.* TO '$MARIADB_USER'@'%'; FLUSH PRIVILEGES;\" && NODE_ENV=test MARIADB_DATABASE=food_nutrition_test npm test",
     "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
-    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\""
+    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\"",
+    "test:unit": "node --test tests/services.test.js tests/repository.test.js"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
